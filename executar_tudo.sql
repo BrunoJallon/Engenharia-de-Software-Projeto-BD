@@ -5,4 +5,6 @@
 
 \ir sql/01_esquema.sql
 \ir sql/02_funcoes.sql
+\ir sql/03_dados_exemplo.sql
+\ir sql/04_consultas.sql
 \ir testes/testes_us01.sql

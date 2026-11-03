@@ -265,5 +265,24 @@ BEGIN
     RAISE NOTICE 'OK  CA7 - integridade garantida pelo banco (5 casos)';
 END $$;
 
+-- ---------------------------------------------------------------------
+-- CA8 – Consulta: a view mostra as 3 parcelas pendentes do cliente
+-- ---------------------------------------------------------------------
+DO $$
+BEGIN
+    PERFORM cadastrar_cobranca_parcelada(
+        p_cpf_cliente => '90000000003', p_valor => 120.00, p_qtd_parcelas => 3,
+        p_primeiro_vencimento => '2027-01-10', p_data_emissao => '2027-01-05');
+
+    ASSERT (SELECT count(*) FROM vw_parcelas_pendentes WHERE cpf = '90000000003') = 3,
+           'CA8: a view deveria trazer 3 linhas para o cliente';
+    ASSERT (SELECT array_agg(parcela ORDER BY data_vencimento)
+              FROM vw_parcelas_pendentes WHERE cpf = '90000000003')
+           = ARRAY['1/3', '2/3', '3/3'],
+           'CA8: a coluna parcela deveria ser 1/3, 2/3 e 3/3';
+
+    RAISE NOTICE 'OK  CA8 - view de parcelas pendentes (1/3, 2/3, 3/3)';
+END $$;
+
 \echo 'TODOS OS TESTES DA US01 PASSARAM'
 ROLLBACK;
