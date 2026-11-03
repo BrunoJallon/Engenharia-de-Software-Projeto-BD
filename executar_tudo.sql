@@ -4,3 +4,5 @@
 \encoding UTF8
 
 \ir sql/01_esquema.sql
+\ir sql/02_funcoes.sql
+\ir testes/testes_us01.sql
