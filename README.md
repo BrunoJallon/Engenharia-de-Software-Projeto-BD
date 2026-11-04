@@ -628,3 +628,54 @@ Roteiro de teste manual da US07 (com uma cobrança de R$ 100,00 em 4x):
 | 5 | ✓ → desmarcar tudo → Confirmar | "Marque ao menos uma parcela." | CA5 |
 | 6 | Lápis | abre o painel da cobrança, como o antigo "nº X" | — |
 | 7 | Lixeira numa cobrança à vista (1/1) | só a opção "Excluir a cobrança" | CA2 |
+
+## Iteração 7: US08
+
+> **COMO** operador **EU QUERO** ver as parcelas separadas em abas (em aberto, atrasadas e pagas) e mês a mês **PARA QUE** a parcela paga não suma da tela e eu acompanhe cada mês, como no aplicativo do banco.
+
+Mudanças na tela:
+
+- **Abas "Em aberto", "Atrasadas" e "Pagas"**, cada uma com um contador. "Em aberto" = vence hoje ou depois; "Atrasadas" = venceu e não foi paga; "Pagas" = já paga. As três juntas mostram todas as parcelas, sem repetir. Uma parcela paga **sai de "Em aberto" e aparece em "Pagas"**. Na aba "Pagas", a coluna "Situação" vira "Pagamento" (data e "Em dia"/"Com atraso de N dias"), e a ação é o lápis, que abre o painel para corrigir ou desfazer o pagamento. As abas funcionam com as setas ← e → do teclado.
+- **Mês:** as setas ‹ › trocam o mês, que começa no mês de hoje. As três abas mostram as parcelas que **vencem** no mês escolhido. "Todos os meses" mostra tudo. Por baixo, o mês só preenche os campos "Vencimento de" e "Vencimento até" com o dia 1 e o último dia. Se a pessoa digitar outras datas nesses campos, o título vira "Período escolhido nos filtros". "Limpar filtros" volta para o mês de hoje.
+- O filtro **"Situação" saiu da tela** (as abas fazem esse papel). A API continua aceitando `situacao`.
+- As planilhas (US05) seguem a busca, o cliente e o mês da tela.
+
+Regras no banco ([`sql/11_abas_us08.sql`](sql/11_abas_us08.sql)):
+
+- `pesquisar_parcelas_pendentes` aceita a situação **`em_aberto`** (vence hoje ou a vencer).
+- Nova **`pesquisar_parcelas_pagas`**, com os mesmos filtros (CPF, busca, período de vencimento), a data do pagamento e os dias de atraso calculados pelo banco (US06).
+- A regra da busca por nome/CPF e a do período passaram para funções auxiliares (`cliente_combina_com_busca`, `validar_periodo`), usadas pelas duas pesquisas.
+
+| CA | Critério | Resultado esperado |
+|---|---|---|
+| **CA1** | Em aberto | traz a parcela que vence hoje e a que vence depois, e não a atrasada |
+| **CA2** | Atrasadas | traz só a parcela vencida e não paga |
+| **CA3** | Pagas | traz a parcela paga, com a data do pagamento e os dias de atraso; a busca por nome funciona |
+| **CA4** | Sem repetir nem perder | em aberto + atrasadas + pagas = todas as parcelas do cliente |
+| **CA5** | Mês nas pagas | a paga aparece no período do vencimento dela e some fora dele; período invertido é recusado |
+
+| método e caminho | o que faz | resposta |
+|---|---|---|
+| `GET /api/parcelas-pendentes?situacao=em_aberto` | aba "Em aberto" (mais os filtros de sempre) | 200 com a lista |
+| `GET /api/parcelas-pagas` com `cpf`, `busca`, `de`, `ate`, `ordem` e `direcao` | aba "Pagas" | 200 com a lista (inclui `dataPagamento` e `diasAtrasoPagamento`); 400 para filtro inválido |
+
+Saída esperada dos testes da US08:
+
+```text
+psql:testes/testes_us08.sql:35: NOTA:  OK  CA1 - "em aberto" traz a que vence hoje e a que vence depois
+psql:testes/testes_us08.sql:46: NOTA:  OK  CA2 - "atrasada" traz só a parcela vencida
+psql:testes/testes_us08.sql:64: NOTA:  OK  CA3 - "pagas" traz a parcela paga, com data e 2 dias de atraso
+psql:testes/testes_us08.sql:78: NOTA:  OK  CA4 - em aberto + atrasadas + pagas = todas as parcelas, sem repetir
+psql:testes/testes_us08.sql:97: NOTA:  OK  CA5 - o período de vencimento filtra as pagas; período invertido é recusado
+TODOS OS TESTES DA US08 PASSARAM
+```
+
+Roteiro de teste manual da US08:
+
+| # | Passo | Resultado esperado | CA |
+|---|---|---|---|
+| 1 | Abrir a tela | mês de hoje, aba "Em aberto", contadores nas três abas | CA1 |
+| 2 | ✓ numa parcela e confirmar | some de "Em aberto"; o contador de "Pagas" sobe e ela aparece lá, com "Em dia" | CA3 |
+| 3 | Seta › | mês seguinte, com as parcelas que vencem nele | CA5 |
+| 4 | "Todos os meses" | todas as parcelas da aba, de qualquer mês | CA4 |
+| 5 | Aba "Atrasadas" | só parcelas vencidas e não pagas (contador em vermelho) | CA2 |
