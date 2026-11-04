@@ -17,6 +17,8 @@
 \ir sql/08_relatorio_us05.sql
 -- US06: data do pagamento (em dia ou com atraso) e id da parcela na pesquisa
 \ir sql/09_pagamento_us06.sql
+-- US07: excluir uma parcela e pagar várias de uma vez (ações da lista)
+\ir sql/10_acoes_lista_us07.sql
 
 -- Testes de aceitação (cada arquivo termina em ROLLBACK)
 \ir testes/testes_us01.sql
@@ -25,3 +27,4 @@
 \ir testes/testes_us04.sql
 \ir testes/testes_us05.sql
 \ir testes/testes_us06.sql
+\ir testes/testes_us07.sql
