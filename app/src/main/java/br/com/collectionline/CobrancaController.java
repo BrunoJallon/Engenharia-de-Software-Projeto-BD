@@ -3,6 +3,7 @@ package br.com.collectionline;
 import br.com.collectionline.dto.CobrancaDetalheDTO;
 import br.com.collectionline.dto.EditarParcelaRequest;
 import br.com.collectionline.dto.FiltroPendentes;
+import br.com.collectionline.dto.MensagemResponse;
 import br.com.collectionline.dto.NovaCobrancaRequest;
 import com.google.gson.JsonParseException;
 import com.sun.net.httpserver.HttpExchange;
@@ -71,9 +72,18 @@ public class CobrancaController implements HttpHandler {
                 if (!exigirMetodo(exchange, metodo, "GET")) return;
                 listarPendentes(exchange);
 
-            } else if ((m = ROTA_COBRANCA.matcher(caminho)).matches()) {          // US02
-                if (!exigirMetodo(exchange, metodo, "GET")) return;
-                detalharCobranca(exchange, Integer.parseInt(m.group(1)));
+            } else if ((m = ROTA_COBRANCA.matcher(caminho)).matches()) {
+                int idCobranca = Integer.parseInt(m.group(1));
+                switch (metodo) {
+                    case "GET" -> detalharCobranca(exchange, idCobranca);       // US02
+                    case "PUT" -> editarCobranca(exchange, idCobranca);         // US04
+                    case "DELETE" -> {                                          // US04
+                        repository.excluirCobranca(idCobranca);
+                        JsonUtil.enviarJson(exchange, 200,
+                                new MensagemResponse("Cobrança nº " + idCobranca + " excluída."));
+                    }
+                    default -> exigirMetodo(exchange, metodo, "GET, PUT, DELETE");
+                }
 
             } else if ((m = ROTA_PARCELA.matcher(caminho)).matches()) {           // US02
                 if (!exigirMetodo(exchange, metodo, "PUT")) return;
@@ -101,47 +111,73 @@ public class CobrancaController implements HttpHandler {
         }
     }
 
+    /** Dados de uma cobrança já conferidos e convertidos (usado no cadastro e na edição). */
+    private record DadosCobranca(String cpf, BigDecimal valor, int qtdParcelas, LocalDate primeiroVencimento) {
+    }
+
     /** POST /api/cobrancas */
     private void cadastrarCobranca(HttpExchange exchange) throws IOException, SQLException {
+        DadosCobranca d = lerDadosCobranca(exchange);
+        if (d == null) {
+            return; // lerDadosCobranca já respondeu com o erro
+        }
+        JsonUtil.enviarJson(exchange, 201,
+                repository.cadastrarCobranca(d.cpf(), d.valor(), d.qtdParcelas(), d.primeiroVencimento()));
+    }
+
+    /** US04 — PUT /api/cobrancas/{id}, com os mesmos campos do cadastro */
+    private void editarCobranca(HttpExchange exchange, int idCobranca) throws IOException, SQLException {
+        DadosCobranca d = lerDadosCobranca(exchange);
+        if (d == null) {
+            return;
+        }
+        JsonUtil.enviarJson(exchange, 200, repository.editarCobranca(
+                idCobranca, d.cpf(), d.valor(), d.qtdParcelas(), d.primeiroVencimento()));
+    }
+
+    /**
+     * Lê {cpfCliente, valor, qtdParcelas, primeiroVencimento} e confere só o
+     * FORMATO (o resto é decidido pela função do banco). Se algo estiver
+     * errado, já responde 400 e devolve null.
+     */
+    private DadosCobranca lerDadosCobranca(HttpExchange exchange) throws IOException {
         NovaCobrancaRequest req = lerCorpoJson(exchange, NovaCobrancaRequest.class);
         if (req == null) {
-            return; // lerCorpoJson já respondeu com o erro
+            return null; // lerCorpoJson já respondeu com o erro
         }
 
-        // --- Validação só de FORMATO (o resto é decidido pela função do banco) ---
         if (vazio(req.cpfCliente()) || vazio(req.valor()) || vazio(req.qtdParcelas())
                 || vazio(req.primeiroVencimento())) {
             JsonUtil.enviarErro(exchange, 400,
                     "Campos obrigatórios: cpfCliente, valor, qtdParcelas e primeiroVencimento.");
-            return;
+            return null;
         }
 
         String cpf = req.cpfCliente().trim();
         if (!CPF.matcher(cpf).matches()) {
             JsonUtil.enviarErro(exchange, 400, "O CPF deve ter exatamente 11 dígitos, sem pontos ou traço.");
-            return;
+            return null;
         }
 
         BigDecimal valor = lerDecimal(req.valor());
         if (valor == null) {
             JsonUtil.enviarErro(exchange, 400, "Valor inválido: use números com ponto decimal, ex.: 100.00.");
-            return;
+            return null;
         }
 
         Integer qtdParcelas = lerInteiro(req.qtdParcelas());
         if (qtdParcelas == null) {
             JsonUtil.enviarErro(exchange, 400, "A quantidade de parcelas deve ser um número inteiro.");
-            return;
+            return null;
         }
 
         LocalDate primeiroVencimento = lerData(req.primeiroVencimento());
         if (primeiroVencimento == null) {
             JsonUtil.enviarErro(exchange, 400, "Data de vencimento inválida: use o formato aaaa-mm-dd.");
-            return;
+            return null;
         }
 
-        JsonUtil.enviarJson(exchange, 201,
-                repository.cadastrarCobranca(cpf, valor, qtdParcelas, primeiroVencimento));
+        return new DadosCobranca(cpf, valor, qtdParcelas, primeiroVencimento);
     }
 
     /**

@@ -197,6 +197,43 @@ public class CobrancaRepository {
         }
     }
 
+    // ---------------------------------------------------------------------
+    // US04: editar e excluir a cobrança
+    // ---------------------------------------------------------------------
+
+    /** Edita a cobrança inteira pela função do banco e devolve o detalhe atualizado. */
+    public CobrancaDetalheDTO editarCobranca(int idCobranca, String cpf, BigDecimal valor, int qtdParcelas,
+                                             LocalDate primeiroVencimento) throws SQLException {
+        try (Connection conn = database.abrirConexao()) {
+            conn.setAutoCommit(false);
+            try {
+                try (PreparedStatement ps = conn.prepareStatement("SELECT editar_cobranca(?, ?, ?, ?, ?)")) {
+                    ps.setInt(1, idCobranca);
+                    ps.setString(2, cpf);
+                    ps.setBigDecimal(3, valor);
+                    ps.setInt(4, qtdParcelas);
+                    ps.setObject(5, primeiroVencimento);
+                    lerInteiro(ps);
+                }
+                CobrancaDetalheDTO detalhe = lerDetalhe(conn, idCobranca);
+                conn.commit();
+                return detalhe;
+            } catch (SQLException | RuntimeException e) {
+                conn.rollback();
+                throw e;
+            }
+        }
+    }
+
+    /** Exclui a cobrança pela função do banco (que recusa se houver parcela paga). */
+    public void excluirCobranca(int idCobranca) throws SQLException {
+        try (Connection conn = database.abrirConexao();
+             PreparedStatement ps = conn.prepareStatement("SELECT excluir_cobranca(?)")) {
+            ps.setInt(1, idCobranca);
+            lerInteiro(ps);
+        }
+    }
+
     /** Marca a parcela como paga e devolve a cobrança atualizada. */
     public CobrancaDetalheDTO pagarParcela(int idParcela) throws SQLException {
         return executarAcaoNaParcela("SELECT pagar_parcela(?)", idParcela);
