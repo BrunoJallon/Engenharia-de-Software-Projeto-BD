@@ -31,6 +31,7 @@ public class StaticFileHandler implements HttpHandler {
             return;
         }
         if (!"GET".equals(exchange.getRequestMethod())) {
+            exchange.getResponseHeaders().set("Allow", "GET"); // o 405 deve dizer qual método vale
             JsonUtil.enviarErro(exchange, 405, "Método não permitido.");
             return;
         }

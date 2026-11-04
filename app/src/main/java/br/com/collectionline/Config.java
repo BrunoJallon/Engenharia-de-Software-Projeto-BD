@@ -30,17 +30,28 @@ public record Config(String dbUrl, String dbUser, String dbPassword, int serverP
             System.exit(1);
         }
 
-        String porta = props.getProperty("server.port", "8080").trim();
+        String textoPorta = props.getProperty("server.port", "8080").trim();
+        int porta;
         try {
-            return new Config(
-                    props.getProperty("db.url", "jdbc:postgresql://localhost:5432/collectionline_xp").trim(),
-                    props.getProperty("db.user", "postgres").trim(),
-                    props.getProperty("db.password", ""),
-                    Integer.parseInt(porta));
+            porta = Integer.parseInt(textoPorta);
         } catch (NumberFormatException e) {
-            System.err.println("server.port inválido no app.properties: " + porta);
-            System.exit(1);
-            return null; // nunca chega aqui
+            porta = -1;
         }
+        if (porta < 1 || porta > 65535) {
+            System.err.println("server.port inválido no app.properties: " + textoPorta + " (use um número de 1 a 65535).");
+            System.exit(1);
+        }
+
+        return new Config(
+                props.getProperty("db.url", "jdbc:postgresql://localhost:5432/collectionline_xp").trim(),
+                props.getProperty("db.user", "postgres").trim(),
+                props.getProperty("db.password", ""),
+                porta);
+    }
+
+    /** Se alguém imprimir a configuração, a senha não aparece. */
+    @Override
+    public String toString() {
+        return "Config[dbUrl=" + dbUrl + ", dbUser=" + dbUser + ", dbPassword=****, serverPort=" + serverPort + "]";
     }
 }

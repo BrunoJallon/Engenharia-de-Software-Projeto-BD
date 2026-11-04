@@ -6,6 +6,17 @@
 -- Esconde os avisos "não existe, ignorando" dos DROP ... IF EXISTS.
 SET client_min_messages = warning;
 
+-- Proteção: este script apaga e recria tabelas. Se o psql estiver conectado
+-- em outro banco (um -d errado), ele para aqui, antes de qualquer DROP.
+\set ON_ERROR_STOP on
+DO $$
+BEGIN
+    IF current_database() <> 'collectionline_xp' THEN
+        RAISE EXCEPTION 'Banco errado: rode os scripts no banco collectionline_xp (conectado em: %).',
+            current_database();
+    END IF;
+END $$;
+
 -- Ordem de remoção: a view depende das tabelas; sem CASCADE para não
 -- apagar sem querer nenhum objeto que não seja desta entrega.
 DROP VIEW IF EXISTS vw_parcelas_pendentes;

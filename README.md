@@ -26,6 +26,7 @@ Cada critério é um teste automatizado em [`testes/testes_us01.sql`](testes/tes
 | **CA6** | Parâmetros inválidos, cada caso isolado | Erro `invalid_parameter_value`, sem gravar nada, para: valor 0; valor −50,00; valor 10,005; quantidade 0; 0,02 em 3x; primeiro vencimento antes da emissão; CPF nulo. |
 | **CA7** | Integridade garantida pelo banco (INSERT direto, sem a função) | Parcela de cobrança inexistente → `foreign_key_violation`; número de parcela repetido na mesma cobrança → `unique_violation`; status `cancelada` → `check_violation`; `numero_parcela` maior que `total_parcelas` → `check_violation`; cobrança para CPF inexistente → `foreign_key_violation`. |
 | **CA8** | Consulta | Depois de cadastrar uma cobrança em 3x para um cliente de teste, `vw_parcelas_pendentes` traz 3 linhas para esse CPF, com a coluna `parcela` igual a `1/3`, `2/3` e `3/3`. |
+| **CA9** | Limites (acrescentado pela equipe depois da revisão) | Erro `invalid_parameter_value`, sem gravar nada, para: valor acima de R$ 99.999.999,99; mais de 360 parcelas; vencimento infinito; último vencimento depois de 31/12/9999; valor `NaN`. |
 
 ## Arquitetura
 
@@ -99,6 +100,10 @@ Correspondência entre o DER e o banco:
 - Os ids (`SERIAL`) podem pular números: os testes fazem `ROLLBACK`, mas os valores já consumidos da sequência não voltam. É o comportamento normal do PostgreSQL.
 - Depois de um cadastro com sucesso, a tela limpa o valor e volta a quantidade para 1 (o valor inicial do campo); cliente e vencimento continuam como estavam.
 - Em `GET /api/parcelas-pendentes`, um `?cpf=` vazio é tratado como "sem filtro"; um `cpf` que não tenha 11 dígitos responde 400.
+- **Limites validados pela função** (CA9): valor até R$ 99.999.999,99 (o máximo de `NUMERIC(10,2)`), no máximo 360 parcelas (30 anos de parcelas mensais, limite combinado pela equipe), datas finitas e com ano de até 4 dígitos, e `NaN` recusado. Sem isso, essas entradas estouravam no `INSERT` e a API respondia 500 em vez de 400.
+- As mensagens da função escrevem valores com vírgula ("O valor 0,02 ...").
+- `sql/01_esquema.sql` começa com uma trava: se o `psql` estiver conectado em outro banco que não `collectionline_xp`, o script para antes de qualquer `DROP`.
+- Os arquivos de teste ligam `plpgsql.check_asserts`, para os `ASSERT` nunca serem ignorados.
 - `Database` registra o driver com `Class.forName("org.postgresql.Driver")`: o `mvn exec:java` roda a aplicação num carregador de classes separado e, sem isso, o `DriverManager` responde "No suitable driver found".
 - O servidor escuta só no endereço local (loopback), então não fica acessível pela rede.
 - A data de emissão é o `CURRENT_DATE` do banco: a API não envia `p_data_emissao`.
@@ -175,6 +180,10 @@ Acesse **http://localhost:8080** no navegador.
 - O `valor` trafega como **texto** (ex.: `"100.00"`) e as datas como texto ISO (`aaaa-mm-dd`).
 - Erros do banco viram HTTP pelo SQLState: `22023` (parâmetro inválido) → **400**; `P0002` (cliente não encontrado) → **404**; classe `23` (violação de restrição) → **409**; qualquer outro → **500** com "Erro interno no servidor" (detalhes só no console). Erros de formato detectados no Java também dão **400**, sem chamar o banco.
 - O formato de erro é sempre `{"erro": "mensagem"}`.
+- O `POST` exige o cabeçalho `Content-Type: application/json` (senão, **415**) e corpo de até 10 KB (senão, **413**). Exigir JSON também impede que outra página aberta no navegador crie cobranças aqui (CSRF).
+- O JSON é lido em modo estrito, o valor só aceita números simples (`100`, `100.50`, `.5`) e a data só aceita `aaaa-mm-dd` com ano de 4 dígitos.
+- O cadastro e a leitura das parcelas criadas acontecem numa única transação no Java.
+- O log mostra método, caminho e status, sem a query string (que pode ter CPF).
 
 Exemplos no Linux, macOS ou Git Bash:
 
@@ -205,7 +214,7 @@ POST R$ 100,00 em 3x, primeiro vencimento em 2027-01-31 → 201
 {"idCobranca":19,"parcelas":[{"numeroParcela":1,"totalParcelas":3,"valor":33.33,"dataVencimento":"2027-01-31","status":"pendente"},{"numeroParcela":2,"totalParcelas":3,"valor":33.33,"dataVencimento":"2027-02-28","status":"pendente"},{"numeroParcela":3,"totalParcelas":3,"valor":33.34,"dataVencimento":"2027-03-31","status":"pendente"}]}
 
 POST R$ 0,02 em 3x → 400
-{"erro":"O valor 0.02 não pode ser dividido em 3 parcelas: cada parcela precisa de pelo menos R$ 0,01."}
+{"erro":"O valor 0,02 não pode ser dividido em 3 parcelas: cada parcela precisa de pelo menos R$ 0,01."}
 
 POST CPF 99999999999 → 404
 {"erro":"Cliente com CPF 99999999999 não está cadastrado."}
@@ -219,21 +228,23 @@ No final da execução do `executar_tudo.sql`, depois das consultas de demonstra
 BEGIN
 SET
 INSERT 0 3
-psql:testes/testes_us01.sql:43: NOTA:  OK  CA1 - cadastro básico (300,00 em 3x de 100,00)
+psql:testes/testes_us01.sql:45: NOTA:  OK  CA1 - cadastro básico (300,00 em 3x de 100,00)
 DO
-psql:testes/testes_us01.sql:63: NOTA:  OK  CA2 - arredondamento (33,33 + 33,33 + 33,34 = 100,00)
+psql:testes/testes_us01.sql:65: NOTA:  OK  CA2 - arredondamento (33,33 + 33,33 + 33,34 = 100,00)
 DO
-psql:testes/testes_us01.sql:84: NOTA:  OK  CA3 - vencimentos mensais (31/01, 28/02, 31/03)
+psql:testes/testes_us01.sql:86: NOTA:  OK  CA3 - vencimentos mensais (31/01, 28/02, 31/03)
 DO
-psql:testes/testes_us01.sql:110: NOTA:  OK  CA4 - parcela única (89,90 em 1x)
+psql:testes/testes_us01.sql:112: NOTA:  OK  CA4 - parcela única (89,90 em 1x)
 DO
-psql:testes/testes_us01.sql:133: NOTA:  OK  CA5 - cliente inexistente é recusado
+psql:testes/testes_us01.sql:135: NOTA:  OK  CA5 - cliente inexistente é recusado
 DO
-psql:testes/testes_us01.sql:211: NOTA:  OK  CA6 - parâmetros inválidos são recusados (7 casos)
+psql:testes/testes_us01.sql:213: NOTA:  OK  CA6 - parâmetros inválidos são recusados (7 casos)
 DO
-psql:testes/testes_us01.sql:266: NOTA:  OK  CA7 - integridade garantida pelo banco (5 casos)
+psql:testes/testes_us01.sql:268: NOTA:  OK  CA7 - integridade garantida pelo banco (5 casos)
 DO
-psql:testes/testes_us01.sql:285: NOTA:  OK  CA8 - view de parcelas pendentes (1/3, 2/3, 3/3)
+psql:testes/testes_us01.sql:287: NOTA:  OK  CA8 - view de parcelas pendentes (1/3, 2/3, 3/3)
+DO
+psql:testes/testes_us01.sql:348: NOTA:  OK  CA9 - limites de valor, quantidade e datas (5 casos)
 DO
 TODOS OS TESTES DA US01 PASSARAM
 ROLLBACK

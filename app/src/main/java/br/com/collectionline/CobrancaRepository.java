@@ -55,38 +55,52 @@ public class CobrancaRepository {
                  ORDER BY numero_parcela""";
 
         try (Connection conn = database.abrirConexao()) {
-            int idCobranca;
-            try (PreparedStatement ps = conn.prepareStatement(sqlFuncao)) {
-                ps.setString(1, cpf);
-                ps.setBigDecimal(2, valor);
-                ps.setInt(3, qtdParcelas);
-                ps.setObject(4, primeiroVencimento);
-                try (ResultSet rs = ps.executeQuery()) {
-                    rs.next();
-                    idCobranca = rs.getInt(1);
-                }
-            }
-
-            List<ParcelaDTO> parcelas = new ArrayList<>();
-            try (PreparedStatement ps = conn.prepareStatement(sqlParcelas)) {
-                ps.setInt(1, idCobranca);
-                try (ResultSet rs = ps.executeQuery()) {
-                    while (rs.next()) {
-                        parcelas.add(new ParcelaDTO(
-                                rs.getInt("numero_parcela"),
-                                rs.getInt("total_parcelas"),
-                                rs.getBigDecimal("valor"),
-                                rs.getObject("data_vencimento", LocalDate.class),
-                                rs.getString("status")));
+            // Cadastrar e ler as parcelas formam UMA transação: se a leitura
+            // falhar, o cadastro também é desfeito, e a tela pode tentar de novo
+            // sem criar uma cobrança duplicada.
+            conn.setAutoCommit(false);
+            try {
+                int idCobranca;
+                try (PreparedStatement ps = conn.prepareStatement(sqlFuncao)) {
+                    ps.setString(1, cpf);
+                    ps.setBigDecimal(2, valor);
+                    ps.setInt(3, qtdParcelas);
+                    ps.setObject(4, primeiroVencimento);
+                    try (ResultSet rs = ps.executeQuery()) {
+                        rs.next();
+                        idCobranca = rs.getInt(1);
                     }
                 }
+
+                List<ParcelaDTO> parcelas = new ArrayList<>();
+                try (PreparedStatement ps = conn.prepareStatement(sqlParcelas)) {
+                    ps.setInt(1, idCobranca);
+                    try (ResultSet rs = ps.executeQuery()) {
+                        while (rs.next()) {
+                            parcelas.add(new ParcelaDTO(
+                                    rs.getInt("numero_parcela"),
+                                    rs.getInt("total_parcelas"),
+                                    rs.getBigDecimal("valor"),
+                                    rs.getObject("data_vencimento", LocalDate.class),
+                                    rs.getString("status")));
+                        }
+                    }
+                }
+
+                conn.commit();   // deu tudo certo: grava de vez
+                return new CobrancaCriadaResponse(idCobranca, parcelas);
+            } catch (SQLException | RuntimeException e) {
+                conn.rollback(); // algo falhou: desfaz o que a função gravou
+                throw e;
             }
-            return new CobrancaCriadaResponse(idCobranca, parcelas);
         }
     }
 
     /** Lê a view de parcelas pendentes; cpf nulo significa "todos os clientes". */
     public List<ParcelaPendenteDTO> listarParcelasPendentes(String cpf) throws SQLException {
+        // O mesmo CPF vai duas vezes: "(nulo OU igual)" faz o filtro ser opcional.
+        // O ::char(11) é necessário porque o PostgreSQL não consegue deduzir
+        // sozinho o tipo de um parâmetro que chega nulo.
         String sql = """
                 SELECT cpf, nome, telefone, id_cobranca, parcela, valor, data_vencimento, dias_para_vencer
                   FROM vw_parcelas_pendentes

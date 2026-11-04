@@ -7,6 +7,8 @@
 BEGIN;
 -- Sem isso as linhas "OK ..." (RAISE NOTICE) não aparecem.
 SET client_min_messages = notice;
+-- Garante que os ASSERT rodem (se alguém desligar, os testes passariam vazios).
+SET plpgsql.check_asserts = on;
 
 -- Clientes de teste: CPFs começando com 9, independentes dos dados de exemplo.
 INSERT INTO cliente (cpf, nome, telefone) VALUES
@@ -282,6 +284,67 @@ BEGIN
            'CA8: a coluna parcela deveria ser 1/3, 2/3 e 3/3';
 
     RAISE NOTICE 'OK  CA8 - view de parcelas pendentes (1/3, 2/3, 3/3)';
+END $$;
+
+-- ---------------------------------------------------------------------
+-- CA9 – Limites (premissa da equipe, criada depois da revisão): valor
+-- acima de R$ 99.999.999,99, mais de 360 parcelas, datas infinitas ou
+-- depois de 31/12/9999 e NaN são recusados, sem gravar nada
+-- ---------------------------------------------------------------------
+DO $$
+DECLARE
+    v_cob_antes INTEGER := (SELECT count(*) FROM cobranca);
+    v_par_antes INTEGER := (SELECT count(*) FROM parcela);
+BEGIN
+    -- valor acima do limite da coluna NUMERIC(10,2)
+    BEGIN
+        PERFORM cadastrar_cobranca_parcelada(
+            p_cpf_cliente => '90000000001', p_valor => 100000000.00, p_qtd_parcelas => 1,
+            p_primeiro_vencimento => '2027-01-10', p_data_emissao => '2027-01-05');
+        RAISE EXCEPTION 'FALHOU CA9: valor acima de 99.999.999,99 deveria ser recusado';
+    EXCEPTION WHEN invalid_parameter_value THEN NULL;
+    END;
+
+    -- mais de 360 parcelas
+    BEGIN
+        PERFORM cadastrar_cobranca_parcelada(
+            p_cpf_cliente => '90000000001', p_valor => 1000.00, p_qtd_parcelas => 361,
+            p_primeiro_vencimento => '2027-01-10', p_data_emissao => '2027-01-05');
+        RAISE EXCEPTION 'FALHOU CA9: 361 parcelas deveria ser recusado';
+    EXCEPTION WHEN invalid_parameter_value THEN NULL;
+    END;
+
+    -- vencimento infinito
+    BEGIN
+        PERFORM cadastrar_cobranca_parcelada(
+            p_cpf_cliente => '90000000001', p_valor => 100.00, p_qtd_parcelas => 1,
+            p_primeiro_vencimento => 'infinity', p_data_emissao => '2027-01-05');
+        RAISE EXCEPTION 'FALHOU CA9: vencimento infinito deveria ser recusado';
+    EXCEPTION WHEN invalid_parameter_value THEN NULL;
+    END;
+
+    -- último vencimento depois de 31/12/9999
+    BEGIN
+        PERFORM cadastrar_cobranca_parcelada(
+            p_cpf_cliente => '90000000001', p_valor => 100.00, p_qtd_parcelas => 3,
+            p_primeiro_vencimento => '9999-12-31', p_data_emissao => '2027-01-05');
+        RAISE EXCEPTION 'FALHOU CA9: último vencimento depois de 31/12/9999 deveria ser recusado';
+    EXCEPTION WHEN invalid_parameter_value THEN NULL;
+    END;
+
+    -- NaN ("não é um número")
+    BEGIN
+        PERFORM cadastrar_cobranca_parcelada(
+            p_cpf_cliente => '90000000001', p_valor => 'NaN', p_qtd_parcelas => 1,
+            p_primeiro_vencimento => '2027-01-10', p_data_emissao => '2027-01-05');
+        RAISE EXCEPTION 'FALHOU CA9: NaN deveria ser recusado';
+    EXCEPTION WHEN invalid_parameter_value THEN NULL;
+    END;
+
+    ASSERT (SELECT count(*) FROM cobranca) = v_cob_antes, 'CA9: nenhuma cobrança deveria ser gravada';
+    ASSERT (SELECT count(*) FROM parcela)  = v_par_antes, 'CA9: nenhuma parcela deveria ser gravada';
+
+    RAISE NOTICE 'OK  CA9 - limites de valor, quantidade e datas (5 casos)';
 END $$;
 
 \echo 'TODOS OS TESTES DA US01 PASSARAM'
