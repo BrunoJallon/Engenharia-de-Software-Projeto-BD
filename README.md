@@ -227,6 +227,7 @@ No final da execução do `executar_tudo.sql`, depois das consultas de demonstra
 ```text
 BEGIN
 SET
+SET
 INSERT 0 3
 psql:testes/testes_us01.sql:45: NOTA:  OK  CA1 - cadastro básico (300,00 em 3x de 100,00)
 DO
@@ -249,6 +250,8 @@ DO
 TODOS OS TESTES DA US01 PASSARAM
 ROLLBACK
 ```
+
+Em seguida vêm os testes da US02 e da US03 (veja [Iteração 2](#iteração-2-us02-e-us03)), terminando em `TODOS OS TESTES DA US02 PASSARAM` e `TODOS OS TESTES DA US03 PASSARAM`.
 
 Em um PostgreSQL configurado em inglês, `NOTA` aparece como `NOTICE`. Se algum critério falhar, o `psql` para na hora (`ON_ERROR_STOP`) e mostra a mensagem do `ASSERT` ou a linha `FALHOU CAx: ...`.
 
@@ -290,7 +293,7 @@ SELECT cadastrar_cobranca_parcelada('11111111111', 25.00, 1, CURRENT_DATE);
 - Vínculo com Loja, Operador e Dispositivo.
 - Login de operador.
 - Cadastro de clientes pela tela.
-- Registro de pagamento e baixa de parcelas.
+- Registro de pagamento e baixa de parcelas (a baixa simples, sem data nem valor pago, foi feita depois, na US02).
 - Atualização automática do status `vencida`.
 - Envio de mensagens pelo WhatsApp.
 - Cobrança sem parcelas.
@@ -310,3 +313,110 @@ Rascunho para o time completar:
 2. A lista de parcelas pendentes.
 3. A saída dos testes do banco (`psql ... -f executar_tudo.sql`).
 4. O trecho da função que calcula as parcelas (`sql/02_funcoes.sql`, o laço `FOR k IN 1 .. p_qtd_parcelas`).
+
+---
+
+## Iteração 2: US02 e US03
+
+Depois de entregar a US01, o cliente (no papel, o Bruno) pediu duas histórias novas. Elas seguiram o mesmo jeito XP: critérios de aceitação, testes escritos antes (fase vermelha) e commits próprios, só depois dos commits da US01.
+
+### US02 — editar e pagar parcelas
+
+> **COMO** operador da loja **EU QUERO** editar o valor e o vencimento de uma parcela e marcar parcelas como pagas **PARA QUE** a cobrança acompanhe renegociações e pagamentos do cliente.
+
+Regras decididas pelo cliente, todas no banco ([`sql/05_funcoes_us02.sql`](sql/05_funcoes_us02.sql)):
+
+- **Editar valor:** o valor da cobrança passa a ser a nova soma das parcelas (a regra "soma = valor" continua valendo).
+- **Editar vencimento:** nunca antes da emissão e sem sair da ordem (entre a parcela anterior e a próxima; o mesmo dia da vizinha é aceito). O vencimento da cobrança continua sendo o da última parcela.
+- **Marcar como paga:** a parcela fica travada (não muda valor nem data). Quando todas estão pagas, a cobrança vira `paga`.
+- **Desfazer pagamento:** volta a parcela e a cobrança para `pendente`, para corrigir um clique errado.
+- **Concorrência:** cada função trava a cobrança (`SELECT ... FOR UPDATE`) antes de mexer, para duas pessoas na mesma cobrança serem atendidas uma de cada vez.
+- "Já paga" / "não está paga" usam o código `object_not_in_prerequisite_state` (55000), que a API devolve como **409**.
+
+| CA | Critério | Resultado esperado |
+|---|---|---|
+| **CA1** | Editar valor | R$ 100,00 em 3x; parcela 2 vira 40,00 → parcelas 33,33 / 40,00 / 33,34 e cobrança de 106,67 |
+| **CA2** | Editar vencimento do meio | só a parcela 2 muda; o vencimento da cobrança continua o da última |
+| **CA3** | Editar vencimento da última | o vencimento da cobrança acompanha |
+| **CA4** | Ordem das datas | antes da anterior, depois da próxima ou antes da emissão → `invalid_parameter_value`, nada muda; o mesmo dia da vizinha é aceito |
+| **CA5** | Valores inválidos | 0, negativo, 3 casas, nulo, data nula, NaN, data infinita → `invalid_parameter_value`; parcela inexistente → `no_data_found` |
+| **CA6** | Pagar | parcela fica `paga` e sai da lista de pendentes; com todas pagas, a cobrança fica `paga` |
+| **CA7** | Paga travada | editar ou pagar de novo → `object_not_in_prerequisite_state` |
+| **CA8** | Desfazer | parcela e cobrança voltam para `pendente`; desfazer de parcela pendente → `object_not_in_prerequisite_state` |
+
+### US03 — pesquisar parcelas pendentes
+
+> **COMO** operador da loja **EU QUERO** pesquisar as parcelas pendentes por cliente (nome ou CPF), situação e período, e ordenar a lista **PARA QUE** eu encontre rápido quem cobrar.
+
+A pesquisa é a função `pesquisar_parcelas_pendentes` ([`sql/06_pesquisa_us03.sql`](sql/06_pesquisa_us03.sql)), feita sobre a view da US01:
+
+- **Busca** por parte do nome (sem diferenciar maiúsculas nem acentos, com `translate`, sem extensões) ou por parte do CPF (só os dígitos contam, então `333.333` também acha). Usa `strpos` ("contém"), que não tem curingas como o `%` do `LIKE`.
+- **Situação:** `atrasada`, `vence_hoje` ou `a_vencer`, calculada pelo banco a partir de `dias_para_vencer`.
+- **Período** de vencimento, com datas inclusivas.
+- **Ordenação** por cliente, cobrança, valor ou vencimento, crescente ou decrescente. Fica no Java, porque o `ORDER BY` não aceita `?`: a coluna sai de uma lista fechada e nunca do texto digitado.
+
+| CA | Critério | Resultado esperado |
+|---|---|---|
+| **CA1** | Busca por nome | "jose antonio" acha "José Antônio"; "CONCEICAO" acha "Maria Conceição" |
+| **CA2** | Busca por CPF | com ou sem pontuação |
+| **CA3** | Situação | cada situação traz só as suas parcelas |
+| **CA4** | Período | só os vencimentos dentro do intervalo, inclusive as pontas |
+| **CA5** | Combinações | busca + situação; filtro por CPF exato da US01; busca vazia = sem busca; sem filtros = view inteira |
+| **CA6** | Inválidos | situação desconhecida e período invertido → `invalid_parameter_value` |
+
+Os testes da US03 usam datas relativas a hoje de propósito: a situação depende do dia em que o teste roda. As conferências olham só os clientes de teste (CPF começando com 7).
+
+### API da iteração 2
+
+| método e caminho | o que faz | resposta |
+|---|---|---|
+| `GET /api/cobrancas/{id}` | detalhe da cobrança com todas as parcelas | 200 `{idCobranca, cpfCliente, nomeCliente, dataEmissao, dataVencimento, valor, statusPagamento, parcelas: [{idParcela, numeroParcela, totalParcelas, valor, dataVencimento, status}]}`; 404 |
+| `PUT /api/parcelas/{id}` | recebe `{valor, dataVencimento}` e chama `editar_parcela` | 200 com o detalhe atualizado; 400, 404 ou 409 |
+| `POST /api/parcelas/{id}/pagamento` | marca a parcela como paga | 200 com o detalhe atualizado; 404 ou 409 |
+| `DELETE /api/parcelas/{id}/pagamento` | desfaz o pagamento | 200 com o detalhe atualizado; 404 ou 409 |
+| `GET /api/parcelas-pendentes?busca=&situacao=&de=&ate=&ordem=&direcao=` | pesquisa (todos opcionais; `cpf` da US01 continua valendo) | 200 com a lista, agora com `situacao` em cada item; 400 para filtros inválidos |
+
+`POST` e `DELETE` no mesmo caminho seguem o sentido dos verbos HTTP: criar o pagamento e remover o pagamento.
+
+### Saída esperada dos testes da iteração 2
+
+```text
+psql:testes/testes_us02.sql:41: NOTA:  OK  CA1 - editar valor ajusta o total da cobrança (100,00 -> 106,67)
+psql:testes/testes_us02.sql:69: NOTA:  OK  CA2 - editar vencimento de parcela do meio
+psql:testes/testes_us02.sql:91: NOTA:  OK  CA3 - editar vencimento da última parcela atualiza a cobrança
+psql:testes/testes_us02.sql:143: NOTA:  OK  CA4 - vencimento fora de ordem ou antes da emissão é recusado
+psql:testes/testes_us02.sql:222: NOTA:  OK  CA5 - valores inválidos e parcela inexistente são recusados (8 casos)
+psql:testes/testes_us02.sql:256: NOTA:  OK  CA6 - pagar parcelas (cobrança fica paga com todas pagas)
+psql:testes/testes_us02.sql:299: NOTA:  OK  CA7 - parcela paga fica travada (3 casos)
+psql:testes/testes_us02.sql:341: NOTA:  OK  CA8 - desfazer pagamento volta parcela e cobrança para pendente
+TODOS OS TESTES DA US02 PASSARAM
+psql:testes/testes_us03.sql:44: NOTA:  OK  CA1 - busca por nome ignora maiúsculas e acentos
+psql:testes/testes_us03.sql:59: NOTA:  OK  CA2 - busca por CPF, com ou sem pontuação
+psql:testes/testes_us03.sql:80: NOTA:  OK  CA3 - filtro por situação (atrasada, vence hoje, a vencer)
+psql:testes/testes_us03.sql:100: NOTA:  OK  CA4 - filtro por período de vencimento
+psql:testes/testes_us03.sql:120: NOTA:  OK  CA5 - filtros combinados e pesquisa sem filtros
+psql:testes/testes_us03.sql:142: NOTA:  OK  CA6 - parâmetros inválidos são recusados (2 casos)
+TODOS OS TESTES DA US03 PASSARAM
+```
+
+### Roteiro de teste manual da iteração 2
+
+| # | Passo | Resultado esperado | CA |
+|---|---|---|---|
+| 1 | Na lista de pendentes, clicar no "nº X" de uma cobrança em 3x | Abre o painel de detalhe com cliente, emissão, vencimento, valor total, status e as 3 parcelas | — |
+| 2 | Editar a parcela 2 para um valor maior | O valor total da cobrança muda para a nova soma | US02-CA1 |
+| 3 | Editar o vencimento da parcela 2 para depois da parcela 3 | Mensagem de erro do banco no painel; os campos continuam preenchidos | US02-CA4 |
+| 4 | Marcar as 3 parcelas como pagas | Status da cobrança vira "Paga", ela some da lista de pendentes; parcela paga não tem "Editar" | US02-CA6 e CA7 |
+| 5 | "Desfazer pagamento" numa parcela paga | Parcela e cobrança voltam para pendente e reaparecem na lista | US02-CA8 |
+| 6 | Esc ou "Fechar" | O painel fecha e o foco volta para o "nº X" | — |
+| 7 | Buscar "joana" e depois "demonstracao" (sem acento) | Só as parcelas da Joana Demonstração | US03-CA1 |
+| 8 | Buscar "333.333.333-33" | Só as parcelas da Joana | US03-CA2 |
+| 9 | Situação "A vencer", depois um período | Só as parcelas que atendem aos filtros | US03-CA3 e CA4 |
+| 10 | Clicar duas vezes no título "Valor" | Ordena do menor para o maior (▲) e depois ao contrário (▼) | US03 |
+| 11 | "Limpar filtros" | Volta a lista completa | US03-CA5 |
+
+### Fora do escopo da iteração 2
+
+- Guardar data e valor de cada pagamento (a entidade Pagamento do DER continua fora do recorte).
+- Pagamento parcial de uma parcela.
+- Excluir parcelas ou mudar a quantidade de parcelas de uma cobrança.
