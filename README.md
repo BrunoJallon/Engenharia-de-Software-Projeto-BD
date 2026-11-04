@@ -474,3 +474,48 @@ Roteiro de teste manual da US04 (no painel de detalhe, aberto pelo "nº X"):
 | 4 | R$ 0,02 em 3x | mensagem de erro do banco no painel | CA4 |
 | 5 | Pagar uma parcela e tentar editar ou excluir a cobrança | botões desabilitados, com a explicação | CA5 e CA7 |
 | 6 | "Excluir cobrança" e confirmar | a cobrança some da lista | CA6 |
+
+## Iteração 4: US05
+
+> **COMO** operador **EU QUERO** a opção de gerar planilhas (CSV/XLSX) com várias cobranças por vez **PARA QUE** eu possa gerar relatórios de forma mais prática.
+
+Regras decididas pelo cliente:
+
+- **O que entra:** as cobranças que aparecem na pesquisa de parcelas pendentes (US03), com os **mesmos filtros** que estiverem na tela (busca, cliente, situação e período). Cobrança toda paga não entra, porque não tem parcela pendente.
+- **CSV:** só o resumo, com uma linha por cobrança. O separador é `;`, o decimal usa vírgula, as datas vêm como dd/mm/aaaa e o arquivo começa com BOM UTF-8, para o Excel em português abrir com acentos.
+- **XLSX (Excel):** duas abas. **Cobranças** traz o mesmo resumo do CSV, e **Parcelas** traz as parcelas pendentes da pesquisa. Datas e valores ficam gravados como data e número de verdade (dá para somar e filtrar), e o cabeçalho fica congelado e com filtro.
+- Os totais (parcelas pagas e pendentes, valor pendente) são calculados no banco, pela função `resumir_cobrancas_pesquisadas` ([`sql/08_relatorio_us05.sql`](sql/08_relatorio_us05.sql)). Ela reaproveita `pesquisar_parcelas_pendentes`, então a regra dos filtros fica num lugar só.
+- **Injeção de CSV:** um nome de cliente que comece com `=`, `+`, `-` ou `@` ganha um apóstrofo na frente, para o Excel não executar o nome como fórmula. No XLSX o texto já é gravado como texto.
+
+| CA | Critério | Resultado esperado |
+|---|---|---|
+| **CA1** | Uma linha por cobrança | R$ 100,00 em 3x com a 1ª paga → 3 parcelas, 1 paga, 2 pendentes, R$ 66,67 pendente |
+| **CA2** | Segue os filtros da pesquisa | CPF, busca por nome, situação e período trazem as mesmas cobranças da lista |
+| **CA3** | Cobrança toda paga | não entra |
+| **CA4** | Filtros inválidos | situação desconhecida ou período invertido → `invalid_parameter_value` (HTTP 400) |
+
+| método e caminho | o que faz | resposta |
+|---|---|---|
+| `GET /api/planilha?formato=csv` ou `xlsx`, com os filtros de `GET /api/parcelas-pendentes` | gera o arquivo | 200 com `Content-Disposition: attachment; filename="cobrancas-aaaa-mm-dd.csv"` (ou `.xlsx`); 400 para formato ou filtro inválido |
+
+No Java, a leitura dos filtros passou para um método só (`lerFiltroPendentes`), usado pela lista e pela planilha. A montagem dos arquivos fica em `PlanilhaCobrancas`, e o XLSX é gerado com a biblioteca **Apache POI** (`poi-ooxml`, no `pom.xml`).
+
+Saída esperada dos testes da US05:
+
+```text
+psql:testes/testes_us05.sql:44: NOTA:  OK  CA1 - uma linha por cobrança, com totais certos (100,00: 1 paga, 66,67 pendente)
+psql:testes/testes_us05.sql:69: NOTA:  OK  CA2 - o resumo segue os filtros da pesquisa
+psql:testes/testes_us05.sql:85: NOTA:  OK  CA3 - cobrança toda paga não entra no resumo
+psql:testes/testes_us05.sql:105: NOTA:  OK  CA4 - filtros inválidos são recusados (2 casos)
+TODOS OS TESTES DA US05 PASSARAM
+```
+
+Roteiro de teste manual da US05 (botões no canto da seção "Parcelas pendentes"):
+
+| # | Passo | Resultado esperado | CA |
+|---|---|---|---|
+| 1 | Sem filtros, "Baixar CSV" e abrir no Excel | uma linha por cobrança pendente, com acentos, valores e datas certos | CA1 |
+| 2 | "Baixar Excel" | abas "Cobranças" e "Parcelas"; os valores somam com `=SOMA()` | CA1 |
+| 3 | Buscar "ana" e baixar de novo | só as cobranças que a lista mostra | CA2 |
+| 4 | Pagar todas as parcelas de uma cobrança e baixar | ela não aparece | CA3 |
+| 5 | Período "de" depois do "até" e baixar | mensagem de erro do banco acima da lista, nenhum arquivo | CA4 |
