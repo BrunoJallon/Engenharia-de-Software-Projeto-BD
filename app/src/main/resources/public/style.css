@@ -952,7 +952,15 @@ p {
 /* Botões de ação lado a lado dentro da célula */
 .acoes-parcela {
     display: flex;
+    flex-wrap: wrap;                  /* "Editar pagamento" + "Desfazer" quebram linha se faltar espaço */
     gap: 8px;
+}
+
+/* US06: célula "Pagamento" do painel — a data em cima, a etiqueta embaixo */
+.data-pagamento {
+    display: block;
+    margin-bottom: 4px;
+    white-space: nowrap;
 }
 
 /* Formulário pequeno de edição */

@@ -257,6 +257,8 @@
                                  aria-sort no <th> da coluna ordenada e a seta ▲ (crescente)
                                  ou ▼ (decrescente); clicar de novo inverte a direção. -->
                             <tr>
+                                <!-- US06: id da parcela no banco (fixo e único para cada parcela) -->
+                                <th scope="col" class="numero"><button type="button" class="botao-ordenar" data-ordem="id">Id<span class="seta" aria-hidden="true"></span></button></th>
                                 <th scope="col"><button type="button" class="botao-ordenar" data-ordem="cliente">Cliente<span class="seta" aria-hidden="true"></span></button></th>
                                 <th scope="col"><button type="button" class="botao-ordenar" data-ordem="cobranca">Cobrança<span class="seta" aria-hidden="true"></span></button></th>
                                 <th scope="col">Parcela</th>
@@ -377,6 +379,7 @@
                             <th scope="col" class="numero">Valor</th>
                             <th scope="col">Vencimento</th>
                             <th scope="col">Status</th>
+                            <th scope="col">Pagamento</th>
                             <th scope="col">Ações</th>
                         </tr>
                     </thead>
@@ -406,6 +409,25 @@
                 <div class="acoes-edicao">
                     <button type="submit" id="botao-salvar-edicao" class="botao-principal acao">Salvar</button>
                     <button type="button" id="botao-cancelar-edicao" class="botao-secundario acao">Cancelar</button>
+                </div>
+            </fieldset>
+        </form>
+
+        <!-- US06: data do pagamento. Usado em "Marcar como paga" e em "Editar pagamento".
+             O max (hoje) é só ajuda do navegador; quem recusa data futura é o banco. -->
+        <form id="form-pagamento" class="form-edicao" hidden>
+            <fieldset>
+                <legend id="legenda-pagamento">Pagamento da parcela</legend>
+                <div class="campos-edicao">
+                    <div class="campo">
+                        <label for="pagamento-data">Data em que o cliente pagou</label>
+                        <p class="dica" id="pagamento-dica"></p>
+                        <input type="date" id="pagamento-data" required aria-describedby="pagamento-dica">
+                    </div>
+                </div>
+                <div class="acoes-edicao">
+                    <button type="submit" id="botao-salvar-pagamento" class="botao-principal acao">Confirmar pagamento</button>
+                    <button type="button" id="botao-cancelar-pagamento" class="botao-secundario acao">Cancelar</button>
                 </div>
             </fieldset>
         </form>

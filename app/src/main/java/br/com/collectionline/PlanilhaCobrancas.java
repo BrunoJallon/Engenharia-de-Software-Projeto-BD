@@ -32,7 +32,7 @@ public final class PlanilhaCobrancas {
             "Valor total (R$)", "Parcelas", "Pagas", "Pendentes", "Valor pendente (R$)", "Status"};
 
     private static final String[] COLUNAS_PARCELAS = {
-            "Cobrança", "Parcela", "CPF", "Cliente", "Telefone", "Valor (R$)", "Vencimento",
+            "Id", "Cobrança", "Parcela", "CPF", "Cliente", "Telefone", "Valor (R$)", "Vencimento",
             "Dias para vencer", "Situação"};
 
     private static final DateTimeFormatter DATA_BR = DateTimeFormatter.ofPattern("dd/MM/yyyy");
@@ -150,17 +150,18 @@ public final class PlanilhaCobrancas {
             numeroLinha = 1;
             for (ParcelaPendenteDTO p : parcelas) {
                 Row linha = abaParcelas.createRow(numeroLinha++);
-                celulaNumero(linha, 0, p.idCobranca());
-                celulaTexto(linha, 1, p.parcela());
-                celulaTexto(linha, 2, formatarCpf(p.cpf()));
-                celulaTexto(linha, 3, p.nome());
-                celulaTexto(linha, 4, formatarTelefone(p.telefone()));
-                celulaDinheiro(linha, 5, p.valor(), estilos);
-                celulaData(linha, 6, p.dataVencimento(), estilos);
-                celulaNumero(linha, 7, p.diasParaVencer());
-                celulaTexto(linha, 8, formatarSituacao(p.situacao()));
+                celulaNumero(linha, 0, p.idParcela());   // US06
+                celulaNumero(linha, 1, p.idCobranca());
+                celulaTexto(linha, 2, p.parcela());
+                celulaTexto(linha, 3, formatarCpf(p.cpf()));
+                celulaTexto(linha, 4, p.nome());
+                celulaTexto(linha, 5, formatarTelefone(p.telefone()));
+                celulaDinheiro(linha, 6, p.valor(), estilos);
+                celulaData(linha, 7, p.dataVencimento(), estilos);
+                celulaNumero(linha, 8, p.diasParaVencer());
+                celulaTexto(linha, 9, formatarSituacao(p.situacao()));
             }
-            ajustarLarguras(abaParcelas, 11, 9, 16, 30, 20, 12, 12, 16, 12);
+            ajustarLarguras(abaParcelas, 8, 11, 9, 16, 30, 20, 12, 12, 16, 12);
 
             planilha.write(saida);
             return saida.toByteArray();

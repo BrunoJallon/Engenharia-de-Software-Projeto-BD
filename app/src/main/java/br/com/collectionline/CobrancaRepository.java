@@ -35,7 +35,8 @@ public class CobrancaRepository {
             "vencimento", "data_vencimento",
             "valor", "valor",
             "cliente", "nome",
-            "cobranca", "id_cobranca");
+            "cobranca", "id_cobranca",
+            "id", "id_parcela");          // US06
 
     private final Database database;
 
@@ -133,10 +134,10 @@ public class CobrancaRepository {
         // sozinho quando o valor chega nulo). Depois da coluna escolhida, os
         // desempates deixam a ordem sempre igual.
         String sql = """
-                SELECT cpf, nome, telefone, id_cobranca, parcela, valor,
+                SELECT id_parcela, cpf, nome, telefone, id_cobranca, parcela, valor,
                        data_vencimento, dias_para_vencer, situacao
                   FROM pesquisar_parcelas_pendentes(?::char(11), ?::text, ?::text, ?::date, ?::date)
-                 ORDER BY %s %s, data_vencimento, cpf, id_cobranca, parcela""".formatted(coluna, direcao);
+                 ORDER BY %s %s, data_vencimento, cpf, id_cobranca, id_parcela""".formatted(coluna, direcao);
 
         List<ParcelaPendenteDTO> lista = new ArrayList<>();
         try (Connection conn = database.abrirConexao();
@@ -149,6 +150,7 @@ public class CobrancaRepository {
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
                     lista.add(new ParcelaPendenteDTO(
+                            rs.getInt("id_parcela"),
                             rs.getString("cpf"),
                             rs.getString("nome"),
                             rs.getString("telefone"),
@@ -274,9 +276,14 @@ public class CobrancaRepository {
         }
     }
 
-    /** Marca a parcela como paga e devolve a cobrança atualizada. */
-    public CobrancaDetalheDTO pagarParcela(int idParcela) throws SQLException {
-        return executarAcaoNaParcela("SELECT pagar_parcela(?)", idParcela);
+    /** US06: marca a parcela como paga na data informada e devolve a cobrança atualizada. */
+    public CobrancaDetalheDTO pagarParcela(int idParcela, LocalDate dataPagamento) throws SQLException {
+        return executarAcaoNaParcela("SELECT pagar_parcela(?, ?)", idParcela, dataPagamento);
+    }
+
+    /** US06: corrige a data de um pagamento já feito e devolve a cobrança atualizada. */
+    public CobrancaDetalheDTO editarPagamento(int idParcela, LocalDate dataPagamento) throws SQLException {
+        return executarAcaoNaParcela("SELECT editar_pagamento_parcela(?, ?)", idParcela, dataPagamento);
     }
 
     /** Desfaz o pagamento da parcela e devolve a cobrança atualizada. */
@@ -285,16 +292,21 @@ public class CobrancaRepository {
     }
 
     /**
-     * Chama uma função do banco que recebe só o id da parcela e devolve o id
-     * da cobrança; depois lê o detalhe atualizado. Tudo numa transação.
+     * Chama uma função do banco que recebe o id da parcela (e, se houver,
+     * outros valores, como a data do pagamento) e devolve o id da cobrança;
+     * depois lê o detalhe atualizado. Tudo numa transação.
      */
-    private CobrancaDetalheDTO executarAcaoNaParcela(String sqlFuncao, int idParcela) throws SQLException {
+    private CobrancaDetalheDTO executarAcaoNaParcela(String sqlFuncao, int idParcela, Object... outros)
+            throws SQLException {
         try (Connection conn = database.abrirConexao()) {
             conn.setAutoCommit(false);
             try {
                 int idCobranca;
                 try (PreparedStatement ps = conn.prepareStatement(sqlFuncao)) {
                     ps.setInt(1, idParcela);
+                    for (int i = 0; i < outros.length; i++) {
+                        ps.setObject(i + 2, outros[i]);
+                    }
                     idCobranca = lerInteiro(ps);
                 }
                 CobrancaDetalheDTO detalhe = lerDetalhe(conn, idCobranca);
@@ -324,7 +336,8 @@ public class CobrancaRepository {
                   JOIN cliente cl ON cl.cpf = co.cpf_cliente
                  WHERE co.id = ?""";
         String sqlParcelas = """
-                SELECT id, numero_parcela, total_parcelas, valor, data_vencimento, status
+                SELECT id, numero_parcela, total_parcelas, valor, data_vencimento, status,
+                       data_pagamento, dias_atraso_pagamento
                   FROM parcela
                  WHERE id_cobranca = ?
                  ORDER BY numero_parcela""";
@@ -340,7 +353,10 @@ public class CobrancaRepository {
                             rs.getInt("total_parcelas"),
                             rs.getBigDecimal("valor"),
                             rs.getObject("data_vencimento", LocalDate.class),
-                            rs.getString("status")));
+                            rs.getString("status"),
+                            rs.getObject("data_pagamento", LocalDate.class),
+                            // getObject (e não getInt) para NULL virar null, e não 0
+                            rs.getObject("dias_atraso_pagamento", Integer.class)));
                 }
             }
         }

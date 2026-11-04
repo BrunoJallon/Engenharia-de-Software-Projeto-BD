@@ -408,6 +408,7 @@ function criarCelulaCobranca(idCobranca) {
 function criarLinhaPendente(p) {
     const linha = document.createElement('tr');
     linha.append(
+        criarCelula(String(p.idParcela), 'numero'),   // US06
         criarCelula(p.nome, 'coluna-cliente'),
         criarCelulaCobranca(p.idCobranca),
         criarCelula(p.parcela),
@@ -556,12 +557,16 @@ function criarLinhaDetalhe(p) {
     const caixaAcoes = document.createElement('div');
     caixaAcoes.className = 'acoes-parcela';
     if (p.status === 'paga') {
-        // Parcela paga fica travada: só dá para desfazer o pagamento.
-        caixaAcoes.append(criarBotaoAcao('Desfazer pagamento', rotulo, (b) => desfazerPagamento(p, rotulo, b)));
+        // Parcela paga: valor e vencimento ficam travados; dá para corrigir a
+        // data do pagamento (US06) ou desfazer o pagamento.
+        caixaAcoes.append(
+            criarBotaoAcao('Editar pagamento', rotulo, () => abrirPagamento(p, rotulo)),
+            criarBotaoAcao('Desfazer pagamento', rotulo, (b) => desfazerPagamento(p, rotulo, b)),
+        );
     } else {
         caixaAcoes.append(
             criarBotaoAcao('Editar', rotulo, () => abrirEdicao(p, rotulo)),
-            criarBotaoAcao('Marcar como paga', rotulo, (b) => pagarParcela(p, rotulo, b)),
+            criarBotaoAcao('Marcar como paga', rotulo, () => abrirPagamento(p, rotulo)),
         );
     }
     const tdAcoes = document.createElement('td');
@@ -573,9 +578,38 @@ function criarLinhaDetalhe(p) {
         criarCelula(formatarMoeda(p.valor), 'numero'),
         criarCelula(formatarData(p.dataVencimento)),
         tdStatus,
+        criarCelulaPagamento(p),
         tdAcoes,
     );
     return linha;
+}
+
+/**
+ * US06 — Célula "Pagamento": a data em que foi paga e uma etiqueta
+ * "Em dia" (verde) ou "Com atraso de N dias" (vermelha). O número de dias
+ * vem pronto do banco (coluna dias_atraso_pagamento). Não paga: "—".
+ */
+function criarCelulaPagamento(p) {
+    const td = document.createElement('td');
+    if (p.status !== 'paga') {
+        td.textContent = '—';
+        return td;
+    }
+    const data = document.createElement('span');
+    data.className = 'data-pagamento';
+    data.textContent = formatarData(p.dataPagamento);
+
+    const etiqueta = document.createElement('span');
+    const atraso = p.diasAtrasoPagamento;
+    if (atraso === 0) {
+        etiqueta.className = 'etiqueta etiqueta-paga';
+        etiqueta.textContent = 'Em dia';
+    } else {
+        etiqueta.className = 'etiqueta etiqueta-atrasada';
+        etiqueta.textContent = atraso === 1 ? 'Com atraso de 1 dia' : `Com atraso de ${atraso} dias`;
+    }
+    td.append(data, etiqueta);
+    return td;
 }
 
 /** Preenche o painel com o detalhe que a API devolveu. */
@@ -616,6 +650,7 @@ async function abrirDetalhe(idCobranca) {
         cobrancaAberta = idCobranca;
         fecharEdicao();
         fecharEdicaoCobranca();
+        fecharPagamento();
         limparAvisosDetalhe();
         escreverAviso('mensagem-pendentes', '');   // apaga um aviso antigo da lista
         mostrarDetalhe(detalhe);
@@ -637,6 +672,7 @@ function fecharDetalhe() {
     el('dialogo-cobranca').close();
     fecharEdicao();
     fecharEdicaoCobranca();
+    fecharPagamento();
     limparAvisosDetalhe();
     const botao = document.querySelector(`#corpo-pendentes [data-cobranca="${cobrancaAberta}"]`);
     (botao || el('filtro-busca')).focus();
@@ -672,6 +708,7 @@ async function executarAcao(botao, textoSucesso, url, opcoes) {
         mostrarDetalhe(detalhe);   // a tabela é refeita com o que o banco gravou
         fecharEdicao();
         fecharEdicaoCobranca();
+        fecharPagamento();
         escreverAviso('mensagem-detalhe', textoSucesso);
         deuCerto = true;
         carregarPendentes();
@@ -689,10 +726,56 @@ async function executarAcao(botao, textoSucesso, url, opcoes) {
     }
 }
 
-/** "Marcar como paga". */
-function pagarParcela(p, rotulo, botao) {
-    executarAcao(botao, `Parcela ${rotulo} marcada como paga.`,
-        `/api/parcelas/${p.idParcela}/pagamento`, { method: 'POST' });
+// US06: parcela cujo pagamento está sendo lançado ou corrigido no formulário.
+let parcelaEmPagamento = null;
+
+/**
+ * "Marcar como paga" ou "Editar pagamento": mostra o formulário da data.
+ * Pagar de novo: vem com a data de hoje. Corrigir: vem com a data gravada.
+ */
+function abrirPagamento(p, rotulo) {
+    const corrigindo = p.status === 'paga';
+    parcelaEmPagamento = { idParcela: p.idParcela, rotulo, corrigindo };
+    fecharEdicao();           // um formulário de cada vez
+    fecharEdicaoCobranca();
+    limparAvisosDetalhe();
+    el('legenda-pagamento').textContent = corrigindo
+        ? `Corrigir o pagamento da parcela ${rotulo}`
+        : `Pagamento da parcela ${rotulo}`;
+    el('pagamento-dica').textContent =
+        `Vencimento: ${formatarData(p.dataVencimento)}. Até essa data, conta como paga em dia.`;
+    el('pagamento-data').max = dataDaquiA(0);   // o calendário não oferece datas futuras
+    el('pagamento-data').value = corrigindo ? p.dataPagamento : dataDaquiA(0);
+    el('botao-salvar-pagamento').textContent = corrigindo ? 'Salvar data' : 'Confirmar pagamento';
+    el('form-pagamento').hidden = false;
+    el('pagamento-data').focus();
+}
+
+/** Esconde o formulário do pagamento. */
+function fecharPagamento() {
+    el('form-pagamento').hidden = true;
+    parcelaEmPagamento = null;
+}
+
+/** "Cancelar" do pagamento. */
+function cancelarPagamento() {
+    fecharPagamento();
+    el('titulo-detalhe').focus();
+}
+
+/** Envia o pagamento: POST para pagar, PUT para corrigir a data. */
+function salvarPagamento(evento) {
+    evento.preventDefault();
+    const { idParcela, rotulo, corrigindo } = parcelaEmPagamento;
+    const data = el('pagamento-data').value;
+    const texto = corrigindo
+        ? `Data do pagamento da parcela ${rotulo} corrigida para ${formatarData(data)}.`
+        : `Parcela ${rotulo} marcada como paga em ${formatarData(data)}.`;
+    executarAcao(el('botao-salvar-pagamento'), texto, `/api/parcelas/${idParcela}/pagamento`, {
+        method: corrigindo ? 'PUT' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ dataPagamento: data }),
+    });
 }
 
 /** "Desfazer pagamento" (só aparece nas parcelas pagas). */
@@ -705,6 +788,7 @@ function desfazerPagamento(p, rotulo, botao) {
 function abrirEdicao(p, rotulo) {
     parcelaEmEdicao = { idParcela: p.idParcela, rotulo };
     fecharEdicaoCobranca();   // um formulário de cada vez
+    fecharPagamento();
     limparAvisosDetalhe();
     el('legenda-edicao').textContent = `Editar parcela ${rotulo}`;
     el('edicao-valor').value = String(p.valor);         // só copia o texto do valor
@@ -748,6 +832,7 @@ function abrirEdicaoCobranca() {
     const d = detalheAtual;
     const primeira = d.parcelas.find((p) => p.numeroParcela === 1);   // a parcela 1
     fecharEdicao();   // um formulário de cada vez
+    fecharPagamento();
     limparAvisosDetalhe();
     el('legenda-edicao-cobranca').textContent = `Editar cobrança nº ${d.idCobranca}`;
     el('edicao-cob-cliente').value = d.cpfCliente;
@@ -819,6 +904,7 @@ async function excluirCobranca() {
     el('dialogo-cobranca').close();
     fecharEdicao();
     fecharEdicaoCobranca();
+    fecharPagamento();
     escreverAviso('mensagem-pendentes', resposta.mensagem);   // "Cobrança nº X excluída."
     el('filtro-busca').focus();
     carregarPendentes();
@@ -863,6 +949,10 @@ document.addEventListener('DOMContentLoaded', () => {
     el('form-edicao-cobranca').addEventListener('submit', salvarEdicaoCobranca);
     el('form-edicao-cobranca').addEventListener('input', () => escreverAviso('erro-detalhe', ''));
     el('botao-cancelar-cobranca').addEventListener('click', cancelarEdicaoCobranca);
+    // US06: data do pagamento
+    el('form-pagamento').addEventListener('submit', salvarPagamento);
+    el('form-pagamento').addEventListener('input', () => escreverAviso('erro-detalhe', ''));
+    el('botao-cancelar-pagamento').addEventListener('click', cancelarPagamento);
 
     atualizarIndicadoresOrdem();
     carregarClientes();
