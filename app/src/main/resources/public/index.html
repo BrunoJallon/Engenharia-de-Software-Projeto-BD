@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <!-- Tema claro sempre (é para projetor), inclusive nos campos nativos do navegador. -->
+    <meta name="color-scheme" content="light">
+    <title>CollectionLine — Cobranças</title>
+    <!-- Ícone vazio: assim o navegador não pede /favicon.ico ao servidor
+         (esse arquivo não existe e o pedido geraria um erro 404). -->
+    <link rel="icon" href="data:,">
+    <!-- Tudo é servido pelo próprio back-end: nada vem da internet
+         (sem fontes externas, sem CDN, sem imagens remotas). -->
+    <link rel="stylesheet" href="style.css">
+    <script src="app.js" defer></script>
+</head>
+<body>
+    <!-- ================= Cabeçalho ================= -->
+    <header class="topo">
+        <div class="topo-conteudo">
+            <!-- Marca própria, desenhada à mão: um "C" e uma linha dividida
+                 em 3 pedaços (as parcelas). É só enfeite: aria-hidden. -->
+            <svg class="marca" viewBox="0 0 40 40" aria-hidden="true">
+                <rect class="marca-fundo" width="40" height="40" rx="11"/>
+                <path class="marca-traco" d="M26 11.5 A8.5 8.5 0 1 0 26 23.5"/>
+                <path class="marca-traco" d="M10.5 31.5h3 M18.5 31.5h3 M26.5 31.5h3"/>
+            </svg>
+
+            <div class="topo-titulos">
+                <h1>CollectionLine — Cobranças</h1>
+                <p class="topo-subtitulo">US01 · Cadastrar cobrança parcelada</p>
+            </div>
+
+            <!-- Data de hoje (o app.js preenche): ajuda a explicar "Vence hoje" e "Atrasada". -->
+            <p class="topo-hoje">Hoje: <strong id="data-hoje">--/--/----</strong></p>
+        </div>
+    </header>
+
+    <main class="grade">
+        <!-- ============ Seção 1: formulário de cadastro ============ -->
+        <section class="cartao" aria-labelledby="titulo-nova">
+            <div class="cartao-cabecalho">
+                <div class="cartao-titulos">
+                    <!-- Ícone decorativo: folha com um "+" -->
+                    <span class="cartao-icone" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                             stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M14 3H7.5A2.5 2.5 0 0 0 5 5.5v13A2.5 2.5 0 0 0 7.5 21h9a2.5 2.5 0 0 0 2.5-2.5V8z"/>
+                            <path d="M14 3v5h5"/>
+                            <path d="M12 11.5v6 M9 14.5h6"/>
+                        </svg>
+                    </span>
+                    <div>
+                        <h2 id="titulo-nova">Nova cobrança parcelada</h2>
+                        <p class="cartao-descricao">Informe o total: o banco de dados calcula as parcelas e os vencimentos.</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Os campos NÃO têm atributo name, de propósito: o app.js lê cada um
+                 pelo id. Se o app.js não carregar, o envio "nativo" do navegador
+                 não coloca nada na URL (o CPF nunca vai para a barra de endereço). -->
+            <form id="form-cobranca">
+                <div class="campos">
+                    <!-- campo-largo: entre 640px e 1279px ocupa a linha inteira,
+                         para o select mostrar "Nome — CPF" sem cortar. -->
+                    <div class="campo campo-largo">
+                        <label for="cliente">Cliente</label>
+                        <p class="dica" id="dica-cliente">Quem vai pagar a cobrança</p>
+                        <select id="cliente" required aria-describedby="dica-cliente">
+                            <option value="">Selecione um cliente</option>
+                        </select>
+                    </div>
+
+                    <div class="campo">
+                        <label for="valor">Valor total (R$)</label>
+                        <p class="dica" id="dica-valor">O banco divide esse total entre as parcelas</p>
+                        <div class="campo-moeda">
+                            <!-- "R$" só visual: o rótulo já diz que o valor é em reais. -->
+                            <span class="prefixo" aria-hidden="true">R$</span>
+                            <input type="number" id="valor" min="0.01" step="0.01"
+                                   inputmode="decimal" required aria-describedby="dica-valor">
+                        </div>
+                    </div>
+
+                    <div class="campo">
+                        <label for="qtd-parcelas">Quantidade de parcelas</label>
+                        <p class="dica" id="dica-qtd">Use 1 para pagamento à vista</p>
+                        <input type="number" id="qtd-parcelas" min="1" step="1"
+                               value="1" required aria-describedby="dica-qtd">
+                    </div>
+
+                    <div class="campo">
+                        <!-- Sem "min" de propósito: assim dá para demonstrar a validação do banco. -->
+                        <label for="primeiro-vencimento">Primeiro vencimento</label>
+                        <p class="dica" id="dica-vencimento">As próximas vencem mês a mês</p>
+                        <input type="date" id="primeiro-vencimento"
+                               required aria-describedby="dica-vencimento">
+                    </div>
+                </div>
+
+                <div class="acoes">
+                    <!-- Durante o envio, o app.js desabilita o botão, troca o texto
+                         para "Cadastrando..." e o CSS mostra um spinner. -->
+                    <button type="submit" id="botao-cadastrar" class="botao-principal">Cadastrar cobrança</button>
+                </div>
+            </form>
+
+            <!-- Avisos: os parágrafos ficam SEMPRE na página (vazios) para o
+                 leitor de tela anunciar quando o app.js escrever neles. -->
+            <div class="aviso aviso-sucesso">
+                <svg class="aviso-icone" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                     stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <circle cx="12" cy="12" r="10"/>
+                    <path d="M7.5 12.5l3 3 6-6.5"/>
+                </svg>
+                <p id="mensagem" role="status" aria-live="polite"></p>
+            </div>
+            <div class="aviso aviso-erro">
+                <svg class="aviso-icone" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                     stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <circle cx="12" cy="12" r="10"/>
+                    <path d="M12 7v6.5 M12 17h.01"/>
+                </svg>
+                <p id="erro" role="alert"></p>
+            </div>
+
+            <!-- Parcelas que o banco acabou de criar (aparece depois do cadastro) -->
+            <div id="resultado" class="resultado" hidden>
+                <!-- Caixa rolável da tabela. O trio de atributos é para quem usa
+                     teclado ou leitor de tela, caso a tabela não caiba e precise rolar:
+                       tabindex="0"     -> a caixa recebe foco pelo Tab e as setas rolam a tabela;
+                       role="region"    -> o leitor de tela trata a caixa como uma área com nome;
+                       aria-labelledby  -> o nome dessa área é o texto da legenda (caption). -->
+                <div class="tabela-rolavel" role="region" aria-labelledby="legenda-criadas" tabindex="0">
+                    <table class="tabela">
+                        <caption id="legenda-criadas">Parcelas criadas</caption>
+                        <thead>
+                            <tr>
+                                <th scope="col">Parcela</th>
+                                <th scope="col" class="numero">Valor</th>
+                                <th scope="col">Vencimento</th>
+                                <th scope="col">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="corpo-parcelas-criadas"></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- ===== Seção 2: parcelas pendentes (vem da view do banco) ===== -->
+        <section class="cartao" aria-labelledby="titulo-pendentes">
+            <div class="cartao-cabecalho">
+                <div class="cartao-titulos">
+                    <!-- Ícone decorativo: calendário -->
+                    <span class="cartao-icone" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                             stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/>
+                            <path d="M3.5 10h17 M8 3v4 M16 3v4"/>
+                            <path d="M8 14h.01 M12 14h.01 M16 14h.01 M8 17.5h.01 M12 17.5h.01"/>
+                        </svg>
+                    </span>
+                    <div>
+                        <div class="titulo-com-contador">
+                            <h2 id="titulo-pendentes">Parcelas pendentes</h2>
+                            <!-- Pílula com quantas linhas a tabela tem agora (o app.js troca o número).
+                                 Na tela aparece só o número; o leitor de tela ouve "Parcelas na lista: 3".
+                                 Tudo numa linha só e sem espaços entre as tags, para não surgir
+                                 um espaço extra dentro da pílula. -->
+                            <span class="contador" aria-live="polite" aria-atomic="true"><span class="sr-only">Parcelas na lista: </span><span id="contador-pendentes">–</span></span>
+                        </div>
+                        <p class="cartao-descricao">Em ordem de vencimento: as mais urgentes aparecem primeiro.</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Barra de filtros: hoje só tem o filtro por cliente. Outros filtros
+                 podem entrar aqui depois (cada um numa div.campo) e eles se
+                 ajeitam lado a lado, quebrando linha quando faltar espaço. -->
+            <div class="barra-filtros">
+                <div class="campo">
+                    <label for="filtro-cliente">Filtrar por cliente</label>
+                    <select id="filtro-cliente">
+                        <option value="">Todos os clientes</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="aviso aviso-erro aviso-pendentes">
+                <svg class="aviso-icone" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                     stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <circle cx="12" cy="12" r="10"/>
+                    <path d="M12 7v6.5 M12 17h.01"/>
+                </svg>
+                <p id="erro-pendentes" role="alert"></p>
+            </div>
+
+            <div id="area-pendentes">
+                <!-- Só aparece em telas estreitas, onde a tabela rola para o lado. -->
+                <p class="dica-rolagem">Deslize a tabela para o lado para ver todas as colunas.</p>
+                <!-- Mesmo trio da tabela de parcelas criadas: tabindex="0" deixa rolar
+                     pelo teclado, role="region" + aria-labelledby dão um nome à área. -->
+                <div class="tabela-rolavel" role="region" aria-labelledby="legenda-pendentes" tabindex="0">
+                    <table class="tabela" id="tabela-pendentes">
+                        <caption id="legenda-pendentes" class="sr-only">Parcelas pendentes</caption>
+                        <thead>
+                            <tr>
+                                <th scope="col">Cliente</th>
+                                <th scope="col">Cobrança</th>
+                                <th scope="col">Parcela</th>
+                                <th scope="col" class="numero">Valor</th>
+                                <th scope="col">Vencimento</th>
+                                <th scope="col">Situação</th>
+                            </tr>
+                        </thead>
+                        <tbody id="corpo-pendentes"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Estado vazio: aparece quando a consulta não traz nenhuma parcela. -->
+            <div id="sem-pendentes" class="vazio" hidden>
+                <!-- Ilustração decorativa: prancheta com um "certo" -->
+                <svg class="vazio-ilustracao" viewBox="0 0 64 64" fill="none" stroke="currentColor"
+                     stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <rect class="vazio-papel" x="12" y="10" width="40" height="48" rx="7"/>
+                    <rect class="vazio-clipe" x="22" y="5" width="20" height="10" rx="4"/>
+                    <path d="M22 35l7 7 13-15"/>
+                </svg>
+                <p class="vazio-titulo">Nenhuma parcela pendente.</p>
+                <p class="vazio-texto">Cadastre uma cobrança ou escolha outro cliente no filtro.</p>
+            </div>
+        </section>
+    </main>
+</body>
+</html>

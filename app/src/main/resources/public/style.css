@@ -1,0 +1,765 @@
+/* =====================================================================
+   CollectionLine · US01 — estilo da tela
+   ---------------------------------------------------------------------
+   Seções deste arquivo:
+      1. Cores e medidas (variáveis)    7. Botão principal
+      2. Base da página                  8. Avisos (sucesso e erro)
+      3. Cabeçalho                       9. Tabelas
+      4. Grade (colunas da página)      10. Etiquetas de situação
+      5. Cartões                        11. Estado vazio
+      6. Formulário e filtros           12. Animações e movimento reduzido
+   Nada vem da internet: fontes do próprio sistema e ícones em SVG
+   escritos à mão direto no index.html.
+   ===================================================================== */
+
+
+/* ---------------------------------------------------------------------
+   1. Cores e medidas
+   TODAS as cores ficam aqui. Para mudar o visual, mude só este bloco.
+   Contrastes conferidos (WCAG AA): texto >= 4,5:1; bordas de campo >= 3:1.
+   --------------------------------------------------------------------- */
+:root {
+    /* Superfícies */
+    --cor-fundo: #eef1f6;             /* fundo da página (cinza-azulado claro) */
+    --cor-cartao: #ffffff;            /* cartões e campos */
+    --cor-cartao-suave: #f6f8fb;      /* cabeçalho de tabela, linhas alternadas, filtros */
+
+    /* Textos */
+    --cor-texto: #162033;             /* texto principal (16:1 no branco) */
+    --cor-texto-suave: #4b5567;       /* dicas e textos de apoio (7,5:1 no branco) */
+    --cor-texto-claro: #ffffff;       /* texto sobre a cor principal */
+
+    /* Bordas */
+    --cor-borda: #d5dbe4;             /* linhas que só separam (cartões, tabela) */
+    --cor-borda-campo: #737f92;       /* contorno dos campos (4:1 no branco) */
+
+    /* Cor principal: marca, botão, foco */
+    --cor-primaria: #1f4fd1;          /* texto branco nela: 6,8:1 */
+    --cor-primaria-escura: #173ca3;   /* botão com o mouse em cima */
+    --cor-primaria-clara: #e8eefc;    /* fundos suaves: ícones, contador, linha com o mouse */
+    --cor-foco: #1f4fd1;              /* contorno de quem navega pelo teclado */
+
+    /* Avisos */
+    --cor-sucesso-fundo: #e9f7ef;
+    --cor-sucesso-borda: #2e8b57;
+    --cor-sucesso-texto: #145232;     /* 8,3:1 no fundo verde-claro */
+    --cor-erro-fundo: #fdeeee;
+    --cor-erro-borda: #d14343;
+    --cor-erro-texto: #8e1c1c;        /* 8:1 no fundo vermelho-claro */
+
+    /* Situação das parcelas */
+    --cor-atrasada-fundo: #fde7e7;
+    --cor-atrasada-borda: #f2b3b3;
+    --cor-atrasada-texto: #991b1b;    /* 7:1 */
+    --cor-hoje-fundo: #fff3cf;
+    --cor-hoje-borda: #ecc35a;
+    --cor-hoje-texto: #7a4300;        /* 7,2:1 */
+    --cor-a-vencer-fundo: #eef2f7;
+    --cor-a-vencer-borda: #d3dbe6;
+    --cor-a-vencer-texto: #3c4859;    /* 8,2:1 */
+
+    /* Sombras e spinner (cores com transparência) */
+    --cor-sombra: rgba(22, 32, 51, 0.08);
+    --cor-sombra-botao: rgba(31, 79, 209, 0.28);
+    --cor-spinner-trilho: rgba(255, 255, 255, 0.35);
+
+    /* Medidas reaproveitadas */
+    --sombra-cartao: 0 1px 2px var(--cor-sombra), 0 8px 24px var(--cor-sombra);
+    --raio-cartao: 14px;
+    --raio-campo: 10px;
+    --espaco-cartao: 20px;            /* espaço interno dos cartões (cresce em telas maiores) */
+}
+
+@media (min-width: 640px) {
+    :root {
+        --espaco-cartao: 24px;
+    }
+}
+
+
+/* ---------------------------------------------------------------------
+   2. Base da página
+   --------------------------------------------------------------------- */
+*,
+*::before,
+*::after {
+    box-sizing: border-box;           /* largura inclui padding e borda */
+}
+
+/* O atributo hidden sempre esconde, mesmo se outra regra mudar o display. */
+[hidden] {
+    display: none !important;
+}
+
+/* Fonte base de 18px, boa para ler no projetor: 112,5% de 16px (o padrão
+   do navegador) = 18px. Em porcentagem, quem aumentou a fonte nas
+   configurações do navegador vê a página crescer junto. */
+html {
+    font-size: 112.5%;
+}
+
+body {
+    margin: 0;
+    background: var(--cor-fundo);
+    color: var(--cor-texto);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    font-size: 1rem;                  /* 1rem = tamanho da fonte do html (18px no padrão) */
+    line-height: 1.5;
+}
+
+h1,
+h2,
+p {
+    margin: 0;
+}
+
+/* Texto só para leitor de tela: fica fora da vista, mas é lido. */
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border: 0;
+}
+
+/* Foco sempre visível para quem navega pelo teclado. */
+:focus-visible {
+    outline: 3px solid var(--cor-foco);
+    outline-offset: 3px;
+}
+
+
+/* ---------------------------------------------------------------------
+   3. Cabeçalho
+   --------------------------------------------------------------------- */
+.topo {
+    background: var(--cor-cartao);
+    border-top: 5px solid var(--cor-primaria);
+    border-bottom: 1px solid var(--cor-borda);
+    box-shadow: 0 1px 3px var(--cor-sombra);
+}
+
+.topo-conteudo {
+    display: flex;
+    flex-wrap: wrap;                  /* no celular, a data desce para outra linha */
+    align-items: center;
+    gap: 12px 16px;
+    max-width: 1480px;
+    margin: 0 auto;
+    padding: 14px 16px;
+}
+
+.marca {
+    flex: none;
+    width: 46px;
+    height: 46px;
+}
+
+.marca-fundo {
+    fill: var(--cor-primaria);
+}
+
+.marca-traco {
+    fill: none;
+    stroke: var(--cor-texto-claro);
+    stroke-width: 3.2;
+    stroke-linecap: round;
+}
+
+.topo h1 {
+    font-size: 1.15rem;
+    line-height: 1.25;
+    letter-spacing: -0.01em;
+}
+
+.topo-subtitulo {
+    color: var(--cor-texto-suave);
+    font-size: 0.9rem;
+}
+
+/* "Hoje: dd/mm/aaaa" em forma de pílula, à direita */
+.topo-hoje {
+    margin-left: auto;
+    padding: 6px 16px;
+    background: var(--cor-fundo);
+    border: 1px solid var(--cor-borda);
+    border-radius: 999px;
+    color: var(--cor-texto-suave);
+    font-size: 0.9rem;
+    white-space: nowrap;
+}
+
+.topo-hoje strong {
+    color: var(--cor-texto);
+    font-variant-numeric: tabular-nums;
+}
+
+@media (min-width: 640px) {
+    .topo-conteudo {
+        padding: 16px 20px;
+    }
+
+    .topo h1 {
+        font-size: 1.45rem;
+    }
+}
+
+
+/* ---------------------------------------------------------------------
+   4. Grade: uma coluna (celular, tablet, projetor de 1024px) e duas
+   colunas lado a lado em telas largas.
+   --------------------------------------------------------------------- */
+.grade {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);   /* minmax(0, ...) deixa a coluna encolher sem estourar */
+    gap: 20px;
+    align-items: start;
+    max-width: 1480px;
+    margin: 0 auto;
+    padding: 20px 16px 40px;
+}
+
+@media (min-width: 640px) {
+    .grade {
+        padding: 28px 20px 48px;
+    }
+}
+
+/* 1280px ou mais: formulário à esquerda, com largura fixa, e a tabela à
+   direita com todo o resto. Com 440px, o select mostra inteiro o
+   "Nome — 000.000.000-00" dos clientes de exemplo; nomes bem mais longos
+   o select corta (a lista aberta sempre mostra o texto todo).
+   Conferido: em 1280px a tabela inteira cabe sem rolar para o lado. */
+@media (min-width: 1280px) {
+    .grade {
+        grid-template-columns: 440px minmax(0, 1fr);
+    }
+}
+
+
+/* ---------------------------------------------------------------------
+   5. Cartões
+   Borda visível além da sombra: no projetor, sombras suaves somem.
+   --------------------------------------------------------------------- */
+.cartao {
+    background: var(--cor-cartao);
+    border: 1px solid var(--cor-borda);
+    border-radius: var(--raio-cartao);
+    box-shadow: var(--sombra-cartao);
+    padding: var(--espaco-cartao);
+}
+
+.cartao-cabecalho {
+    margin-bottom: 24px;
+}
+
+/* Ícone + título + descrição, lado a lado */
+.cartao-titulos {
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+}
+
+.cartao-icone {
+    flex: none;
+    display: grid;
+    place-items: center;
+    width: 42px;
+    height: 42px;
+    border-radius: 12px;
+    background: var(--cor-primaria-clara);
+    color: var(--cor-primaria);       /* o SVG usa currentColor = esta cor */
+}
+
+.cartao-icone svg {
+    width: 24px;
+    height: 24px;
+}
+
+.cartao h2 {
+    font-size: 1.15rem;               /* no celular, um pouco menor para caber numa linha */
+    line-height: 1.3;
+}
+
+@media (min-width: 640px) {
+    .cartao h2 {
+        font-size: 1.25rem;
+    }
+}
+
+.cartao-descricao {
+    margin-top: 2px;
+    color: var(--cor-texto-suave);
+    font-size: 0.9rem;
+}
+
+/* Título "Parcelas pendentes" com o contador ao lado */
+.titulo-com-contador {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 10px;
+}
+
+.contador {
+    min-width: 2.2em;
+    padding: 1px 10px;
+    border-radius: 999px;
+    background: var(--cor-primaria-clara);
+    color: var(--cor-primaria);
+    font-size: 0.9rem;
+    font-weight: 700;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+}
+
+
+/* ---------------------------------------------------------------------
+   6. Formulário e filtros
+   --------------------------------------------------------------------- */
+.campos {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);   /* celular: um campo embaixo do outro */
+    gap: 20px;
+}
+
+/* Entre 640px e 1279px o formulário ocupa a largura toda: campos 2 a 2.
+   align-items: end alinha as caixas de digitação pela parte de baixo. */
+@media (min-width: 640px) and (max-width: 1279px) {
+    .campos {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 20px 24px;
+        align-items: end;
+    }
+
+    /* O campo Cliente ocupa a linha inteira (da primeira à última coluna),
+       senão o select fica estreito e corta o CPF. */
+    .campo-largo {
+        grid-column: 1 / -1;
+    }
+}
+
+.campo label {
+    display: block;
+    font-weight: 600;
+}
+
+/* Texto de ajuda curto, entre o rótulo e o campo */
+.dica {
+    margin: 2px 0 8px;
+    color: var(--cor-texto-suave);
+    font-size: 0.9rem;
+    line-height: 1.4;
+}
+
+.campo input,
+.campo select {
+    display: block;
+    width: 100%;
+    min-height: 52px;
+    padding: 10px 14px;
+    font: inherit;
+    color: var(--cor-texto);
+    background: var(--cor-cartao);
+    border: 1px solid var(--cor-borda-campo);
+    border-radius: var(--raio-campo);
+    transition: border-color 0.15s ease;
+}
+
+.campo input:hover,
+.campo select:hover {
+    border-color: var(--cor-texto-suave);
+}
+
+.campo input:focus-visible,
+.campo select:focus-visible {
+    border-color: var(--cor-foco);
+    outline-offset: 1px;
+}
+
+/* Campo de dinheiro com "R$" desenhado dentro, à esquerda */
+.campo-moeda {
+    position: relative;
+}
+
+.campo-moeda .prefixo {
+    position: absolute;
+    left: 14px;
+    top: 50%;
+    transform: translateY(-50%);      /* centraliza na altura */
+    color: var(--cor-texto-suave);
+    font-weight: 600;
+    pointer-events: none;             /* o clique "atravessa" e cai no campo */
+}
+
+.campo-moeda input {
+    padding-left: 50px;               /* espaço para o "R$" */
+}
+
+/* Barra de filtros da tabela. Cada filtro é uma div.campo; quando houver
+   mais de um, eles ficam lado a lado e quebram linha se faltar espaço. */
+.barra-filtros {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 16px 20px;
+    margin-bottom: 20px;
+    padding: 14px 16px 16px;
+    background: var(--cor-cartao-suave);
+    border: 1px solid var(--cor-borda);
+    border-radius: var(--raio-campo);
+}
+
+.barra-filtros .campo {
+    flex: 1 1 15em;                   /* cresce e encolhe junto com os vizinhos */
+    min-width: 0;                     /* deixa encolher no celular */
+    max-width: 26em;
+}
+
+.barra-filtros label {
+    margin-bottom: 6px;
+}
+
+
+/* ---------------------------------------------------------------------
+   7. Botão principal (com spinner enquanto envia)
+   --------------------------------------------------------------------- */
+.acoes {
+    margin-top: 24px;
+}
+
+.botao-principal {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;                        /* espaço entre o spinner e o texto */
+    width: 100%;
+    min-height: 54px;
+    padding: 12px 28px;
+    font: inherit;
+    font-weight: 700;
+    color: var(--cor-texto-claro);
+    background: var(--cor-primaria);
+    border: 0;
+    border-radius: var(--raio-campo);
+    box-shadow: 0 4px 12px var(--cor-sombra-botao);
+    cursor: pointer;
+    transition: background-color 0.15s ease, transform 0.15s ease;
+}
+
+.botao-principal:hover {
+    background: var(--cor-primaria-escura);
+}
+
+.botao-principal:active {
+    transform: translateY(1px);       /* "afunda" um pouquinho no clique */
+}
+
+.botao-principal:disabled {
+    cursor: progress;
+}
+
+/* Spinner: um círculo com só a parte de cima branca, girando.
+   É desenhado pelo CSS e só existe enquanto o botão tem a classe "carregando". */
+.botao-principal.carregando::before {
+    content: "";
+    width: 20px;
+    height: 20px;
+    border: 3px solid var(--cor-spinner-trilho);
+    border-top-color: var(--cor-texto-claro);
+    border-radius: 50%;
+    animation: girar 0.8s linear infinite;
+}
+
+/* Com o formulário largo, o botão não precisa ocupar a linha toda. */
+@media (min-width: 640px) and (max-width: 1279px) {
+    .botao-principal {
+        width: auto;
+        min-width: 280px;
+    }
+}
+
+
+/* ---------------------------------------------------------------------
+   8. Avisos (sucesso e erro)
+   O parágrafo com o texto nunca sai da página (o leitor de tela precisa
+   dele). A "caixa" colorida só aparece com a classe .visivel, que o
+   app.js liga quando existe texto para mostrar.
+   --------------------------------------------------------------------- */
+.aviso {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+}
+
+.aviso-icone {
+    display: none;
+    flex: none;
+    width: 26px;
+    height: 26px;
+}
+
+.aviso.visivel {
+    margin-top: 20px;
+    padding: 14px 16px;
+    border: 1px solid;
+    border-left-width: 6px;           /* faixa grossa à esquerda, como um marcador */
+    border-radius: var(--raio-campo);
+    font-weight: 600;
+    animation: surgir 0.25s ease-out;
+}
+
+.aviso.visivel .aviso-icone {
+    display: block;
+}
+
+.aviso-sucesso {
+    background: var(--cor-sucesso-fundo);
+    border-color: var(--cor-sucesso-borda);
+    color: var(--cor-sucesso-texto);
+}
+
+.aviso-erro {
+    background: var(--cor-erro-fundo);
+    border-color: var(--cor-erro-borda);
+    color: var(--cor-erro-texto);
+}
+
+/* O erro da lista fica entre os filtros e a tabela */
+.aviso-pendentes.visivel {
+    margin: 0 0 20px;
+}
+
+
+/* ---------------------------------------------------------------------
+   9. Tabelas
+   --------------------------------------------------------------------- */
+.resultado {
+    margin-top: 20px;
+    animation: surgir 0.25s ease-out;
+}
+
+/* Caixa da tabela: encosta nas laterais do cartão (margem negativa do
+   mesmo tamanho do espaço interno) e, se a tela for estreita, a tabela
+   rola só aqui dentro. A página nunca rola para o lado. */
+.tabela-rolavel {
+    overflow-x: auto;
+    margin-left: calc(-1 * var(--espaco-cartao));
+    margin-right: calc(-1 * var(--espaco-cartao));
+}
+
+.tabela-rolavel:focus-visible {
+    outline-offset: -3px;             /* contorno de foco por dentro da caixa */
+}
+
+.tabela {
+    width: 100%;
+    border-collapse: collapse;
+    font-variant-numeric: tabular-nums;   /* algarismos de mesma largura: números alinhados */
+}
+
+.tabela caption {
+    padding: 0 var(--espaco-cartao) 10px;
+    text-align: left;
+    font-weight: 700;
+}
+
+.tabela th,
+.tabela td {
+    padding: 13px 12px;
+    text-align: left;
+    white-space: nowrap;              /* nenhuma coluna quebra linha... */
+    border-bottom: 1px solid var(--cor-borda);
+}
+
+/* Primeira e última colunas alinhadas com o conteúdo do cartão */
+.tabela th:first-child,
+.tabela td:first-child {
+    padding-left: var(--espaco-cartao);
+}
+
+.tabela th:last-child,
+.tabela td:last-child {
+    padding-right: var(--espaco-cartao);
+}
+
+.tabela thead th {
+    padding-top: 10px;
+    padding-bottom: 10px;
+    border-top: 1px solid var(--cor-borda);
+    background: var(--cor-cartao-suave);
+    color: var(--cor-texto-suave);
+    font-size: 0.85rem;
+    font-weight: 600;
+}
+
+/* Linhas alternadas (zebra) e destaque da linha sob o mouse */
+.tabela tbody tr {
+    transition: background-color 0.15s ease;
+}
+
+.tabela tbody tr:nth-child(even) {
+    background: var(--cor-cartao-suave);
+}
+
+.tabela tbody tr:hover {
+    background: var(--cor-primaria-clara);
+}
+
+/* Valores em dinheiro: à direita, para comparar casa por casa */
+.tabela .numero {
+    text-align: right;
+}
+
+/* ...exceto o nome do cliente, que pode quebrar linha para a tabela caber */
+.tabela .coluna-cliente {
+    white-space: normal;
+    font-weight: 600;
+    line-height: 1.3;                 /* se quebrar em 2 linhas, fica compacto */
+}
+
+/* Aviso "deslize para o lado": escondido em telas largas */
+.dica-rolagem {
+    display: none;
+}
+
+/* Telas estreitas: a tabela não cabe de jeito nenhum, então ela rola para
+   o lado (com o aviso acima dela) e o nome do cliente fica numa linha só. */
+@media (max-width: 819px) {
+    .dica-rolagem {
+        display: block;
+        margin-bottom: 10px;
+        color: var(--cor-texto-suave);
+        font-size: 0.9rem;
+    }
+
+    .tabela .coluna-cliente {
+        white-space: nowrap;
+    }
+}
+
+
+/* ---------------------------------------------------------------------
+   10. Etiquetas de situação (Atrasada, Vence hoje, Vence em N dias)
+   A cor ajuda, mas o texto sozinho já diz a situação.
+   --------------------------------------------------------------------- */
+.etiqueta {
+    display: inline-block;
+    padding: 3px 12px;
+    border: 1px solid;
+    border-radius: 999px;             /* bordas bem redondas: formato de pílula */
+    font-size: 0.85rem;
+    font-weight: 600;
+    line-height: 1.4;
+    white-space: nowrap;
+}
+
+.etiqueta-atrasada {
+    background: var(--cor-atrasada-fundo);
+    border-color: var(--cor-atrasada-borda);
+    color: var(--cor-atrasada-texto);
+}
+
+.etiqueta-hoje {
+    background: var(--cor-hoje-fundo);
+    border-color: var(--cor-hoje-borda);
+    color: var(--cor-hoje-texto);
+}
+
+.etiqueta-a-vencer {
+    background: var(--cor-a-vencer-fundo);
+    border-color: var(--cor-a-vencer-borda);
+    color: var(--cor-a-vencer-texto);
+}
+
+
+/* ---------------------------------------------------------------------
+   11. Estado vazio ("Nenhuma parcela pendente.")
+   --------------------------------------------------------------------- */
+.vazio {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    padding: 40px 20px;
+    text-align: center;
+    background: var(--cor-cartao-suave);
+    border: 2px dashed var(--cor-borda);
+    border-radius: var(--raio-cartao);
+}
+
+.vazio-ilustracao {
+    width: 72px;
+    height: 72px;
+    margin-bottom: 6px;
+    color: var(--cor-primaria);
+}
+
+.vazio-papel {
+    fill: var(--cor-primaria-clara);
+}
+
+.vazio-clipe {
+    fill: var(--cor-cartao);
+}
+
+.vazio-titulo {
+    font-size: 1.1rem;
+    font-weight: 700;
+}
+
+.vazio-texto {
+    color: var(--cor-texto-suave);
+    font-size: 0.9rem;
+}
+
+
+/* ---------------------------------------------------------------------
+   12. Animações e movimento reduzido
+   --------------------------------------------------------------------- */
+@keyframes girar {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* Avisos e resultado aparecem com um leve "deslizar" de cima para baixo */
+@keyframes surgir {
+    from {
+        opacity: 0;
+        transform: translateY(-6px);
+    }
+    to {
+        opacity: 1;
+        transform: none;
+    }
+}
+
+/* Quem pediu "reduzir movimento" no sistema: sem transições e sem
+   deslizamentos. O spinner continua (mostra que a tela está trabalhando),
+   mas gira bem mais devagar. */
+@media (prefers-reduced-motion: reduce) {
+    .campo input,
+    .campo select,
+    .botao-principal,
+    .tabela tbody tr {
+        transition: none;
+    }
+
+    .aviso.visivel,
+    .resultado {
+        animation: none;
+    }
+
+    .botao-principal:active {
+        transform: none;
+    }
+
+    .botao-principal.carregando::before {
+        animation-duration: 2.4s;
+    }
+}
