@@ -519,3 +519,58 @@ Roteiro de teste manual da US05 (botões no canto da seção "Parcelas pendentes
 | 3 | Buscar "ana" e baixar de novo | só as cobranças que a lista mostra | CA2 |
 | 4 | Pagar todas as parcelas de uma cobrança e baixar | ela não aparece | CA3 |
 | 5 | Período "de" depois do "até" e baixar | mensagem de erro do banco acima da lista, nenhum arquivo | CA4 |
+
+## Iteração 5: US06
+
+> **COMO** operador **EU QUERO** ver o id de cada parcela na lista e registrar a data em que o cliente pagou **PARA QUE** eu identifique cada parcela e saiba se ela foi paga em dia ou com atraso.
+
+Regras decididas pelo cliente, todas no banco ([`sql/09_pagamento_us06.sql`](sql/09_pagamento_us06.sql)). Diferente dos arquivos anteriores, este **altera** o que já existe (`ALTER TABLE`) e pode rodar num banco que já tem dados:
+
+- **Id na lista:** a primeira coluna da lista de pendentes mostra o **id da parcela** no banco, que é fixo e único. Ela também é ordenável (`ordem=id`) e aparece na aba "Parcelas" do Excel. Para isso a view `vw_parcelas_pendentes` e a função `pesquisar_parcelas_pendentes` passaram a devolver `id_parcela`.
+- **Data do pagamento:** a parcela ganhou a coluna `data_pagamento`. "Marcar como paga" agora abre um campo de data, que vem com a data de hoje. **Data no futuro ou vazia é recusada** (`invalid_parameter_value` → HTTP 400). Pagar antes da emissão é aceito, porque o cadastro permite emissão futura.
+- **Em dia ou com atraso:** a coluna `dias_atraso_pagamento` é **calculada pelo próprio banco** (`GENERATED ALWAYS AS ... STORED`): mostra os dias entre o vencimento e o pagamento, 0 se foi pago até o vencimento, e fica vazia se a parcela não foi paga. O painel mostra a data com a etiqueta "Em dia" ou "Com atraso de N dias".
+- **Corrigir a data:** parcela paga ganhou o botão "Editar pagamento" (`editar_pagamento_parcela`). Parcela que não está paga → `object_not_in_prerequisite_state` (HTTP 409).
+- **Desfazer pagamento** agora também apaga a data.
+- **Paga ⇔ tem data:** a restrição `ck_parcela_pagamento` impede uma parcela paga sem data ou pendente com data.
+- Parcelas pagas antes desta história recebem como data de pagamento o próprio vencimento (ou hoje, se ele ainda não chegou).
+
+| CA | Critério | Resultado esperado |
+|---|---|---|
+| **CA1** | Pagar com data | 5 dias antes do vencimento → 0 dias de atraso; 7 dias depois → 7 dias |
+| **CA2** | Sem data | o pagamento fica com a data de hoje |
+| **CA3** | Data inválida | amanhã, daqui a um ano ou vazia → `invalid_parameter_value`; a parcela continua pendente |
+| **CA4** | Corrigir a data | o atraso é recalculado; data futura, parcela pendente ou inexistente são recusadas |
+| **CA5** | Desfazer | a parcela volta a pendente, sem data nem atraso |
+| **CA6** | Restrição da tabela | `UPDATE` deixando paga sem data, ou pendente com data → `check_violation` |
+| **CA7** | Id na pesquisa | `pesquisar_parcelas_pendentes` devolve o `id_parcela` |
+
+| método e caminho | o que faz | resposta |
+|---|---|---|
+| `POST /api/parcelas/{id}/pagamento` com `{"dataPagamento": "aaaa-mm-dd"}` | marca como paga na data informada (**o corpo agora é obrigatório**) | 200 com o detalhe; 400, 404 ou 409 |
+| `PUT /api/parcelas/{id}/pagamento` com `{"dataPagamento": "aaaa-mm-dd"}` | corrige a data do pagamento | 200 com o detalhe; 400, 404 ou 409 |
+| `GET /api/cobrancas/{id}` | cada parcela agora traz `dataPagamento` e `diasAtrasoPagamento` | — |
+| `GET /api/parcelas-pendentes` | cada linha agora traz `idParcela`; `ordem` aceita `id` | — |
+
+Saída esperada dos testes da US06:
+
+```text
+psql:testes/testes_us06.sql:46: NOTA:  OK  CA1 - pagar com data: antes do vencimento = em dia; 7 dias depois = 7 dias de atraso
+psql:testes/testes_us06.sql:57: NOTA:  OK  CA2 - sem data informada, o pagamento fica com a data de hoje
+psql:testes/testes_us06.sql:78: NOTA:  OK  CA3 - data no futuro ou vazia é recusada (3 casos)
+psql:testes/testes_us06.sql:112: NOTA:  OK  CA4 - corrigir a data do pagamento recalcula o atraso (e recusa 3 casos inválidos)
+psql:testes/testes_us06.sql:126: NOTA:  OK  CA5 - desfazer o pagamento apaga a data
+psql:testes/testes_us06.sql:144: NOTA:  OK  CA6 - a tabela recusa paga sem data e pendente com data
+psql:testes/testes_us06.sql:156: NOTA:  OK  CA7 - a pesquisa de pendentes traz o id da parcela
+TODOS OS TESTES DA US06 PASSARAM
+```
+
+Roteiro de teste manual da US06:
+
+| # | Passo | Resultado esperado | CA |
+|---|---|---|---|
+| 1 | Olhar a lista de pendentes e clicar no título "Id" | primeira coluna com o id da parcela, ordenável | CA7 |
+| 2 | No painel, "Marcar como paga" e confirmar com a data de hoje | coluna "Pagamento" mostra a data e "Em dia" (se o vencimento ainda não passou) | CA1 e CA2 |
+| 3 | Numa parcela atrasada, pagar com a data de hoje | "Com atraso de N dias" | CA1 |
+| 4 | "Editar pagamento" e trocar a data | etiqueta recalculada | CA4 |
+| 5 | Tentar uma data no futuro | o calendário não deixa; pela API, mensagem do banco | CA3 |
+| 6 | "Desfazer pagamento" | a parcela volta para a lista, sem data | CA5 |
