@@ -7,7 +7,9 @@
       3. Cabeçalho                       9. Tabelas
       4. Grade (colunas da página)      10. Etiquetas de situação
       5. Cartões                        11. Estado vazio
-      6. Formulário e filtros           12. Animações e movimento reduzido
+      6. Formulário e filtros           12. Botões secundários e ordenação
+                                        13. Painel de detalhe (US02)
+                                        14. Animações e movimento reduzido
    Nada vem da internet: fontes do próprio sistema e ícones em SVG
    escritos à mão direto no index.html.
    ===================================================================== */
@@ -58,7 +60,13 @@
     --cor-a-vencer-borda: #d3dbe6;
     --cor-a-vencer-texto: #3c4859;    /* 8,2:1 */
 
-    /* Sombras e spinner (cores com transparência) */
+    /* Parcela paga (US02): verde, como o aviso de sucesso */
+    --cor-paga-fundo: #e9f7ef;
+    --cor-paga-borda: #9fd4b4;
+    --cor-paga-texto: #145232;        /* 8,3:1 */
+
+    /* Sombras, spinner e fundo atrás do painel (cores com transparência) */
+    --cor-fundo-escurecido: rgba(22, 32, 51, 0.55);
     --cor-sombra: rgba(22, 32, 51, 0.08);
     --cor-sombra-botao: rgba(31, 79, 209, 0.28);
     --cor-spinner-trilho: rgba(255, 255, 255, 0.35);
@@ -424,6 +432,24 @@ p {
     margin-bottom: 6px;
 }
 
+/* Busca um pouco mais larga; situação e datas mais estreitas */
+.barra-filtros .campo-busca {
+    flex-basis: 18em;
+}
+
+.barra-filtros .campo-curto {
+    flex-basis: 10em;
+}
+
+/* O botão "Limpar filtros" fica alinhado embaixo, junto dos campos */
+.acoes-filtro {
+    flex: 0 0 auto;
+}
+
+.acoes-filtro .botao-secundario {
+    min-height: 52px;                 /* mesma altura dos campos */
+}
+
 
 /* ---------------------------------------------------------------------
    7. Botão principal (com spinner enquanto envia)
@@ -670,10 +696,18 @@ p {
     color: var(--cor-hoje-texto);
 }
 
-.etiqueta-a-vencer {
+.etiqueta-a-vencer,
+.etiqueta-pendente {
     background: var(--cor-a-vencer-fundo);
     border-color: var(--cor-a-vencer-borda);
     color: var(--cor-a-vencer-texto);
+}
+
+/* Status "Paga" no painel de detalhe (US02) */
+.etiqueta-paga {
+    background: var(--cor-paga-fundo);
+    border-color: var(--cor-paga-borda);
+    color: var(--cor-paga-texto);
 }
 
 
@@ -719,7 +753,212 @@ p {
 
 
 /* ---------------------------------------------------------------------
-   12. Animações e movimento reduzido
+   12. Botões secundários, botão "nº X" e títulos ordenáveis
+   --------------------------------------------------------------------- */
+
+/* Botão de contorno: ações menos importantes (Limpar, Editar, Fechar...) */
+.botao-secundario {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 44px;                 /* área de clique confortável */
+    padding: 8px 18px;
+    font: inherit;
+    font-weight: 600;
+    color: var(--cor-primaria);
+    background: var(--cor-cartao);
+    border: 1px solid var(--cor-primaria);
+    border-radius: var(--raio-campo);
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background-color 0.15s ease;
+}
+
+.botao-secundario:hover {
+    background: var(--cor-primaria-clara);
+}
+
+.botao-secundario:disabled {
+    color: var(--cor-texto-suave);
+    border-color: var(--cor-borda-campo);
+    background: var(--cor-cartao-suave);
+    cursor: progress;
+}
+
+/* Versão menor, para caber nas linhas da tabela */
+.botao-pequeno {
+    min-height: 40px;
+    padding: 6px 14px;
+    font-size: 0.9rem;
+}
+
+/* "nº X" na lista: é um botão, mas com cara de link (sublinhado) */
+.botao-link {
+    padding: 4px 2px;
+    font: inherit;
+    font-weight: 600;
+    color: var(--cor-primaria);
+    background: none;
+    border: 0;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+    cursor: pointer;
+}
+
+.botao-link:hover {
+    color: var(--cor-primaria-escura);
+    text-decoration-thickness: 2px;
+}
+
+/* Título de coluna clicável: parece texto de cabeçalho, mas é botão */
+.botao-ordenar {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 0;
+    font: inherit;
+    color: inherit;
+    background: none;
+    border: 0;
+    cursor: pointer;
+}
+
+.botao-ordenar:hover {
+    color: var(--cor-texto);
+    text-decoration: underline;
+}
+
+/* Seta ▲/▼ da coluna ordenada */
+.seta {
+    font-size: 0.75em;
+}
+
+
+/* ---------------------------------------------------------------------
+   13. Painel de detalhe da cobrança (US02) — elemento <dialog>
+   --------------------------------------------------------------------- */
+.dialogo {
+    width: min(780px, calc(100vw - 24px));   /* nunca mais largo que a tela */
+    max-height: calc(100vh - 24px);
+    overflow-y: auto;                        /* conteúdo grande rola dentro do painel */
+    padding: var(--espaco-cartao);
+    color: var(--cor-texto);
+    background: var(--cor-cartao);
+    border: 1px solid var(--cor-borda);
+    border-radius: var(--raio-cartao);
+    box-shadow: 0 12px 40px var(--cor-sombra);
+}
+
+/* Fundo escurecido atrás do painel (só existe com showModal) */
+.dialogo::backdrop {
+    background: var(--cor-fundo-escurecido);
+}
+
+.dialogo-cabecalho {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 16px;
+}
+
+.dialogo h2 {
+    font-size: 1.25rem;
+}
+
+/* Dados da cobrança em "caixinhas": 2 por linha no celular, 3 no computador */
+.resumo-cobranca {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px 24px;
+    margin: 0;
+    padding: 16px;
+    background: var(--cor-cartao-suave);
+    border: 1px solid var(--cor-borda);
+    border-radius: var(--raio-campo);
+}
+
+@media (min-width: 640px) {
+    .resumo-cobranca {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+}
+
+.resumo-cobranca .resumo-cliente {
+    grid-column: 1 / -1;              /* nome e CPF ocupam a linha inteira */
+}
+
+.resumo-cobranca dt {
+    color: var(--cor-texto-suave);
+    font-size: 0.85rem;
+}
+
+.resumo-cobranca dd {
+    margin: 0;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+
+.tabela-detalhe {
+    margin-top: 20px;
+}
+
+/* Botões de ação lado a lado dentro da célula */
+.acoes-parcela {
+    display: flex;
+    gap: 8px;
+}
+
+/* Formulário pequeno de edição */
+.form-edicao {
+    margin-top: 20px;
+}
+
+.form-edicao fieldset {
+    margin: 0;
+    padding: 16px;
+    border: 1px solid var(--cor-borda-campo);
+    border-radius: var(--raio-campo);
+}
+
+.form-edicao legend {
+    padding: 0 6px;
+    font-weight: 700;
+}
+
+.campos-edicao {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
+}
+
+@media (min-width: 640px) {
+    .campos-edicao {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+.campos-edicao label {
+    margin-bottom: 6px;
+}
+
+.acoes-edicao {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-top: 16px;
+}
+
+/* No painel, o botão Salvar não precisa ocupar a linha toda */
+.acoes-edicao .botao-principal {
+    width: auto;
+    min-width: 140px;
+    min-height: 48px;
+}
+
+
+/* ---------------------------------------------------------------------
+   14. Animações e movimento reduzido
    --------------------------------------------------------------------- */
 @keyframes girar {
     to {
@@ -746,6 +985,7 @@ p {
     .campo input,
     .campo select,
     .botao-principal,
+    .botao-secundario,
     .tabela tbody tr {
         transition: none;
     }

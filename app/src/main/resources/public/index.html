@@ -171,20 +171,49 @@
                                  um espaço extra dentro da pílula. -->
                             <span class="contador" aria-live="polite" aria-atomic="true"><span class="sr-only">Parcelas na lista: </span><span id="contador-pendentes">–</span></span>
                         </div>
-                        <p class="cartao-descricao">Em ordem de vencimento: as mais urgentes aparecem primeiro.</p>
+                        <p class="cartao-descricao">Clique no título de uma coluna para ordenar e no número da cobrança para ver o detalhe.</p>
                     </div>
                 </div>
             </div>
 
-            <!-- Barra de filtros: hoje só tem o filtro por cliente. Outros filtros
-                 podem entrar aqui depois (cada um numa div.campo) e eles se
-                 ajeitam lado a lado, quebrando linha quando faltar espaço. -->
-            <div class="barra-filtros">
+            <!-- Barra de filtros (US03). Cada filtro é uma div.campo; eles ficam lado
+                 a lado e quebram linha quando falta espaço. Qualquer mudança refaz a
+                 consulta; na busca, a consulta espera a pessoa parar de digitar. -->
+            <div class="barra-filtros" role="search" aria-label="Filtros da lista de parcelas">
+                <div class="campo campo-busca">
+                    <label for="filtro-busca">Buscar por nome ou CPF</label>
+                    <input type="search" id="filtro-busca" maxlength="100" autocomplete="off">
+                </div>
+
                 <div class="campo">
                     <label for="filtro-cliente">Filtrar por cliente</label>
                     <select id="filtro-cliente">
                         <option value="">Todos os clientes</option>
                     </select>
+                </div>
+
+                <div class="campo campo-curto">
+                    <label for="filtro-situacao">Situação</label>
+                    <select id="filtro-situacao">
+                        <option value="">Todas</option>
+                        <option value="atrasada">Atrasadas</option>
+                        <option value="vence_hoje">Vencem hoje</option>
+                        <option value="a_vencer">A vencer</option>
+                    </select>
+                </div>
+
+                <div class="campo campo-curto">
+                    <label for="filtro-de">Vencimento de</label>
+                    <input type="date" id="filtro-de">
+                </div>
+
+                <div class="campo campo-curto">
+                    <label for="filtro-ate">Vencimento até</label>
+                    <input type="date" id="filtro-ate">
+                </div>
+
+                <div class="acoes-filtro">
+                    <button type="button" id="botao-limpar-filtros" class="botao-secundario">Limpar filtros</button>
                 </div>
             </div>
 
@@ -206,12 +235,15 @@
                     <table class="tabela" id="tabela-pendentes">
                         <caption id="legenda-pendentes" class="sr-only">Parcelas pendentes</caption>
                         <thead>
+                            <!-- Colunas ordenáveis: o título é um botão. O app.js coloca
+                                 aria-sort no <th> da coluna ordenada e a seta ▲ (crescente)
+                                 ou ▼ (decrescente); clicar de novo inverte a direção. -->
                             <tr>
-                                <th scope="col">Cliente</th>
-                                <th scope="col">Cobrança</th>
+                                <th scope="col"><button type="button" class="botao-ordenar" data-ordem="cliente">Cliente<span class="seta" aria-hidden="true"></span></button></th>
+                                <th scope="col"><button type="button" class="botao-ordenar" data-ordem="cobranca">Cobrança<span class="seta" aria-hidden="true"></span></button></th>
                                 <th scope="col">Parcela</th>
-                                <th scope="col" class="numero">Valor</th>
-                                <th scope="col">Vencimento</th>
+                                <th scope="col" class="numero"><button type="button" class="botao-ordenar" data-ordem="valor">Valor<span class="seta" aria-hidden="true"></span></button></th>
+                                <th scope="col"><button type="button" class="botao-ordenar" data-ordem="vencimento">Vencimento<span class="seta" aria-hidden="true"></span></button></th>
                                 <th scope="col">Situação</th>
                             </tr>
                         </thead>
@@ -229,10 +261,93 @@
                     <rect class="vazio-clipe" x="22" y="5" width="20" height="10" rx="4"/>
                     <path d="M22 35l7 7 13-15"/>
                 </svg>
-                <p class="vazio-titulo">Nenhuma parcela pendente.</p>
-                <p class="vazio-texto">Cadastre uma cobrança ou escolha outro cliente no filtro.</p>
+                <!-- O app.js troca estes textos quando há filtros ativos. -->
+                <p class="vazio-titulo" id="vazio-titulo">Nenhuma parcela pendente.</p>
+                <p class="vazio-texto" id="vazio-texto">Cadastre uma cobrança ou escolha outro cliente no filtro.</p>
             </div>
         </section>
     </main>
+
+    <!-- ===== US02: detalhe da cobrança (janela modal) =====
+         <dialog> aberto com showModal(): o foco fica preso aqui dentro, a tecla
+         Esc fecha e o resto da página fica escurecido e sem clique. -->
+    <dialog id="dialogo-cobranca" class="dialogo" aria-labelledby="titulo-detalhe">
+        <div class="dialogo-cabecalho">
+            <!-- tabindex="-1": o app.js pode pôr o foco no título depois de uma ação. -->
+            <h2 id="titulo-detalhe" tabindex="-1">Cobrança</h2>
+            <button type="button" id="botao-fechar-detalhe" class="botao-secundario botao-pequeno">Fechar</button>
+        </div>
+
+        <!-- Dados da cobrança (lista de "termo: valor") -->
+        <dl class="resumo-cobranca">
+            <div class="resumo-cliente"><dt>Cliente</dt><dd id="detalhe-cliente"></dd></div>
+            <div><dt>Emissão</dt><dd id="detalhe-emissao"></dd></div>
+            <div><dt>Último vencimento</dt><dd id="detalhe-vencimento"></dd></div>
+            <div><dt>Valor total</dt><dd id="detalhe-valor"></dd></div>
+            <div><dt>Status</dt><dd id="detalhe-status"></dd></div>
+        </dl>
+
+        <!-- Avisos do painel (mesma ideia dos avisos do formulário) -->
+        <div class="aviso aviso-sucesso">
+            <svg class="aviso-icone" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                 stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <circle cx="12" cy="12" r="10"/>
+                <path d="M7.5 12.5l3 3 6-6.5"/>
+            </svg>
+            <p id="mensagem-detalhe" role="status" aria-live="polite"></p>
+        </div>
+        <div class="aviso aviso-erro">
+            <svg class="aviso-icone" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                 stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <circle cx="12" cy="12" r="10"/>
+                <path d="M12 7v6.5 M12 17h.01"/>
+            </svg>
+            <p id="erro-detalhe" role="alert"></p>
+        </div>
+
+        <!-- Todas as parcelas (pendentes e pagas), com as ações de cada uma -->
+        <div class="tabela-detalhe">
+            <div class="tabela-rolavel" role="region" aria-labelledby="legenda-detalhe" tabindex="0">
+                <table class="tabela">
+                    <caption id="legenda-detalhe">Parcelas da cobrança</caption>
+                    <thead>
+                        <tr>
+                            <th scope="col">Parcela</th>
+                            <th scope="col" class="numero">Valor</th>
+                            <th scope="col">Vencimento</th>
+                            <th scope="col">Status</th>
+                            <th scope="col">Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody id="corpo-detalhe"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Formulário pequeno de edição (aparece ao clicar em "Editar").
+             Sem "min" na data: quem valida a ordem dos vencimentos é o banco. -->
+        <form id="form-edicao" class="form-edicao" hidden>
+            <fieldset>
+                <legend id="legenda-edicao">Editar parcela</legend>
+                <div class="campos-edicao">
+                    <div class="campo">
+                        <label for="edicao-valor">Novo valor (R$)</label>
+                        <div class="campo-moeda">
+                            <span class="prefixo" aria-hidden="true">R$</span>
+                            <input type="number" id="edicao-valor" min="0.01" step="0.01" inputmode="decimal" required>
+                        </div>
+                    </div>
+                    <div class="campo">
+                        <label for="edicao-vencimento">Novo vencimento</label>
+                        <input type="date" id="edicao-vencimento" required>
+                    </div>
+                </div>
+                <div class="acoes-edicao">
+                    <button type="submit" id="botao-salvar-edicao" class="botao-principal acao">Salvar</button>
+                    <button type="button" id="botao-cancelar-edicao" class="botao-secundario acao">Cancelar</button>
+                </div>
+            </fieldset>
+        </form>
+    </dialog>
 </body>
 </html>
