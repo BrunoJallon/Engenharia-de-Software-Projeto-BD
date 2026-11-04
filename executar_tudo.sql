@@ -11,8 +11,11 @@
 -- US02: editar e pagar parcelas / US03: pesquisa de pendentes
 \ir sql/05_funcoes_us02.sql
 \ir sql/06_pesquisa_us03.sql
+-- US04: editar e excluir cobrança
+\ir sql/07_funcoes_us04.sql
 
 -- Testes de aceitação (cada arquivo termina em ROLLBACK)
 \ir testes/testes_us01.sql
 \ir testes/testes_us02.sql
 \ir testes/testes_us03.sql
+\ir testes/testes_us04.sql
