@@ -7,6 +7,7 @@ import br.com.collectionline.dto.FiltroPendentes;
 import br.com.collectionline.dto.MensagemResponse;
 import br.com.collectionline.dto.NovaCobrancaRequest;
 import br.com.collectionline.dto.PagamentoRequest;
+import br.com.collectionline.dto.PagarParcelasRequest;
 import com.google.gson.JsonParseException;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
@@ -92,9 +93,22 @@ public class CobrancaController implements HttpHandler {
                     default -> exigirMetodo(exchange, metodo, "GET, PUT, DELETE");
                 }
 
-            } else if ((m = ROTA_PARCELA.matcher(caminho)).matches()) {           // US02
-                if (!exigirMetodo(exchange, metodo, "PUT")) return;
-                editarParcela(exchange, Integer.parseInt(m.group(1)));
+            } else if (caminho.equals("/api/pagamentos")) {                        // US07
+                if (!exigirMetodo(exchange, metodo, "POST")) return;
+                pagarParcelas(exchange);
+
+            } else if ((m = ROTA_PARCELA.matcher(caminho)).matches()) {
+                int idParcela = Integer.parseInt(m.group(1));
+                switch (metodo) {
+                    case "PUT" -> editarParcela(exchange, idParcela);              // US02
+                    case "DELETE" -> {                                             // US07
+                        int idCobranca = repository.excluirParcela(idParcela);
+                        JsonUtil.enviarJson(exchange, 200, new MensagemResponse(
+                                "Parcela excluída. As outras parcelas da cobrança nº " + idCobranca
+                                        + " foram renumeradas."));
+                    }
+                    default -> exigirMetodo(exchange, metodo, "PUT, DELETE");
+                }
 
             } else if ((m = ROTA_PAGAMENTO.matcher(caminho)).matches()) {         // US02
                 // POST cria o pagamento; PUT corrige a data (US06); DELETE desfaz.
@@ -319,6 +333,40 @@ public class CobrancaController implements HttpHandler {
             return;
         }
         JsonUtil.enviarJson(exchange, 200, repository.editarParcela(idParcela, valor, dataVencimento));
+    }
+
+    /** Quantas parcelas dá para pagar de uma vez (o banco aceita até 360 por cobrança). */
+    private static final int MAXIMO_PARCELAS_POR_PAGAMENTO = 360;
+
+    /** US07 — POST /api/pagamentos com {idsParcelas: [1, 2], dataPagamento: "aaaa-mm-dd"} */
+    private void pagarParcelas(HttpExchange exchange) throws IOException, SQLException {
+        PagarParcelasRequest req = lerCorpoJson(exchange, PagarParcelasRequest.class);
+        if (req == null) {
+            return;
+        }
+        List<Integer> ids = req.idsParcelas();
+        if (ids == null || ids.isEmpty() || ids.contains(null)) {
+            JsonUtil.enviarErro(exchange, 400, "Escolha ao menos uma parcela para pagar.");
+            return;
+        }
+        if (ids.size() > MAXIMO_PARCELAS_POR_PAGAMENTO) {
+            JsonUtil.enviarErro(exchange, 400,
+                    "Dá para pagar no máximo " + MAXIMO_PARCELAS_POR_PAGAMENTO + " parcelas de uma vez.");
+            return;
+        }
+        if (vazio(req.dataPagamento())) {
+            JsonUtil.enviarErro(exchange, 400, "Campo obrigatório: dataPagamento.");
+            return;
+        }
+        LocalDate data = lerData(req.dataPagamento());
+        if (data == null) {
+            JsonUtil.enviarErro(exchange, 400, "Data do pagamento inválida: use o formato aaaa-mm-dd.");
+            return;
+        }
+        int qtd = repository.pagarParcelas(ids, data);
+        JsonUtil.enviarJson(exchange, 200, new MensagemResponse(
+                (qtd == 1 ? "1 parcela marcada como paga" : qtd + " parcelas marcadas como pagas")
+                        + " em " + data.format(java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy")) + "."));
     }
 
     /**

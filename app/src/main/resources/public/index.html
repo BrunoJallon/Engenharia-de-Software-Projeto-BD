@@ -260,11 +260,12 @@
                                 <!-- US06: id da parcela no banco (fixo e único para cada parcela) -->
                                 <th scope="col" class="numero"><button type="button" class="botao-ordenar" data-ordem="id">Id<span class="seta" aria-hidden="true"></span></button></th>
                                 <th scope="col"><button type="button" class="botao-ordenar" data-ordem="cliente">Cliente<span class="seta" aria-hidden="true"></span></button></th>
-                                <th scope="col"><button type="button" class="botao-ordenar" data-ordem="cobranca">Cobrança<span class="seta" aria-hidden="true"></span></button></th>
                                 <th scope="col">Parcela</th>
                                 <th scope="col" class="numero"><button type="button" class="botao-ordenar" data-ordem="valor">Valor<span class="seta" aria-hidden="true"></span></button></th>
                                 <th scope="col"><button type="button" class="botao-ordenar" data-ordem="vencimento">Vencimento<span class="seta" aria-hidden="true"></span></button></th>
                                 <th scope="col">Situação</th>
+                                <!-- US07: editar (abre o painel), marcar como paga e excluir -->
+                                <th scope="col">Ações</th>
                             </tr>
                         </thead>
                         <tbody id="corpo-pendentes"></tbody>
@@ -431,6 +432,71 @@
                 </div>
             </fieldset>
         </form>
+    </dialog>
+
+    <!-- ===== US07: janela "Marcar como paga", aberta pelo botão da lista =====
+         Mostra as parcelas pendentes da cobrança com caixinhas: a parcela da
+         linha clicada já vem marcada, e dá para marcar todas ou só algumas. -->
+    <dialog id="dialogo-pagar" class="dialogo dialogo-pequeno" aria-labelledby="titulo-pagar">
+        <form id="form-pagar">
+            <div class="dialogo-cabecalho">
+                <h2 id="titulo-pagar" tabindex="-1">Marcar como paga</h2>
+            </div>
+            <p class="dialogo-subtitulo" id="pagar-cliente"></p>
+
+            <fieldset class="lista-escolha">
+                <legend>Quais parcelas o cliente pagou?</legend>
+                <label class="escolha escolha-todas">
+                    <input type="checkbox" id="pagar-todas"> Todas as parcelas pendentes
+                </label>
+                <div id="pagar-parcelas"></div>
+            </fieldset>
+
+            <div class="campo">
+                <label for="pagar-data">Data em que o cliente pagou</label>
+                <p class="dica" id="pagar-dica">Até o vencimento de cada parcela, conta como paga em dia.</p>
+                <input type="date" id="pagar-data" required aria-describedby="pagar-dica">
+            </div>
+
+            <div class="aviso aviso-erro">
+                <svg class="aviso-icone" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                     stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <circle cx="12" cy="12" r="10"/>
+                    <path d="M12 7v6.5 M12 17h.01"/>
+                </svg>
+                <p id="erro-pagar" role="alert"></p>
+            </div>
+
+            <div class="acoes-edicao">
+                <button type="submit" id="botao-confirmar-pagar" class="botao-principal">Confirmar pagamento</button>
+                <button type="button" id="botao-cancelar-pagar" class="botao-secundario">Cancelar</button>
+            </div>
+        </form>
+    </dialog>
+
+    <!-- ===== US07: janela da lixeira — excluir só a parcela ou a cobrança inteira ===== -->
+    <dialog id="dialogo-excluir" class="dialogo dialogo-pequeno" aria-labelledby="titulo-excluir">
+        <div class="dialogo-cabecalho">
+            <h2 id="titulo-excluir" tabindex="-1">Excluir</h2>
+        </div>
+        <p class="dialogo-subtitulo" id="excluir-cliente"></p>
+        <p>O que você quer excluir? Isso não pode ser desfeito.</p>
+
+        <div class="aviso aviso-erro">
+            <svg class="aviso-icone" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                 stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <circle cx="12" cy="12" r="10"/>
+                <path d="M12 7v6.5 M12 17h.01"/>
+            </svg>
+            <p id="erro-excluir" role="alert"></p>
+        </div>
+
+        <div class="opcoes-excluir">
+            <button type="button" id="botao-excluir-parcela" class="botao-secundario botao-perigo">Excluir só esta parcela</button>
+            <button type="button" id="botao-excluir-tudo" class="botao-secundario botao-perigo">Excluir a cobrança inteira</button>
+            <button type="button" id="botao-cancelar-excluir" class="botao-secundario">Cancelar</button>
+        </div>
+        <p class="dica" id="excluir-dica">As outras parcelas são renumeradas e o valor da cobrança passa a ser a soma das que sobrarem.</p>
     </dialog>
 </body>
 </html>

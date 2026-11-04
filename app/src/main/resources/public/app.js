@@ -387,20 +387,48 @@ function atualizarTextoVazio() {
     }
 }
 
+// US07: desenhos (SVG) dos botões de ícone da lista. São só traços; a cor
+// vem do botão (currentColor), então funcionam no tema claro e no escuro.
+const ICONES = {
+    editar: '<path d="M4 20h4L19 9l-4-4L4 16v4z M13.5 6.5l4 4"/>',
+    pagar: '<circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.7 2.7L16 9.5"/>',
+    excluir: '<path d="M4 7h16 M9 7V4.5h6V7 M6.5 7l1 13h9l1-13 M10 11v5.5 M14 11v5.5"/>',
+};
+
 /**
- * Célula "Cobrança": um <button> de verdade (funciona com Tab e Enter) que
- * abre o detalhe. O aria-label repete o "nº X" visível com mais contexto.
+ * Cria um botão só com ícone. Quem não enxerga o ícone ouve o aria-label;
+ * quem passa o mouse vê o mesmo texto no title (a "dica" do navegador).
  */
-function criarCelulaCobranca(idCobranca) {
+function criarBotaoIcone(icone, texto, classeExtra, aoClicar) {
     const botao = document.createElement('button');
     botao.type = 'button';
-    botao.className = 'botao-link';
-    botao.textContent = `nº ${idCobranca}`;
-    botao.dataset.cobranca = idCobranca;   // vira o atributo data-cobranca="X"
-    botao.setAttribute('aria-label', `Abrir detalhe da cobrança nº ${idCobranca}`);
-    botao.addEventListener('click', () => abrirDetalhe(idCobranca));
+    botao.className = `botao-icone ${classeExtra}`;
+    botao.setAttribute('aria-label', texto);
+    botao.title = texto;
+    botao.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+        stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONES[icone]}</svg>`;
+    botao.addEventListener('click', aoClicar);
+    return botao;
+}
+
+/** US07 — Célula "Ações": editar (abre o painel), marcar como paga e excluir. */
+function criarCelulaAcoes(p) {
+    const contexto = `parcela ${p.parcela} de ${p.nome}`;
+    const editar = criarBotaoIcone('editar', `Editar — ${contexto}`, '', () => abrirDetalhe(p.idCobranca));
+    // Ao fechar o painel, o foco volta para este botão (fecharDetalhe procura o data-cobranca).
+    editar.dataset.cobranca = p.idCobranca;
+
+    const pagar = criarBotaoIcone('pagar', `Marcar como paga — ${contexto}`, 'botao-icone-pagar', () => abrirPagar(p));
+    const excluir = criarBotaoIcone('excluir', `Excluir — ${contexto}`, 'botao-icone-excluir', () => abrirExcluir(p));
+    // Ao fechar a janela sem fazer nada, o foco volta para o botão certo.
+    pagar.dataset.parcela = p.idParcela;
+    excluir.dataset.parcela = p.idParcela;
+
+    const caixa = document.createElement('div');
+    caixa.className = 'acoes-linha';
+    caixa.append(editar, pagar, excluir);
     const td = document.createElement('td');
-    td.append(botao);
+    td.append(caixa);
     return td;
 }
 
@@ -410,11 +438,11 @@ function criarLinhaPendente(p) {
     linha.append(
         criarCelula(String(p.idParcela), 'numero'),   // US06
         criarCelula(p.nome, 'coluna-cliente'),
-        criarCelulaCobranca(p.idCobranca),
         criarCelula(p.parcela),
         criarCelula(formatarMoeda(p.valor), 'numero'),
         criarCelula(formatarData(p.dataVencimento)),
         criarCelulaSituacao(p.diasParaVencer),
+        criarCelulaAcoes(p),                          // US07
     );
     return linha;
 }
@@ -911,7 +939,150 @@ async function excluirCobranca() {
 }
 
 // ---------------------------------------------------------------------
-// 9) Início: roda quando a página termina de carregar
+// 9) Ações direto na lista (US07): marcar como paga e excluir
+// ---------------------------------------------------------------------
+
+// Linha da lista cujo botão abriu a janela (para devolver o foco ao fechar).
+let linhaDaAcao = null;
+
+/** Fecha uma das janelas da US07 e devolve o foco ao botão que a abriu. */
+function fecharJanelaDaLista(idDialogo, classeBotao) {
+    el(idDialogo).close();
+    const botao = linhaDaAcao && document.querySelector(
+        `#corpo-pendentes .${classeBotao}[data-parcela="${linhaDaAcao.idParcela}"]`);
+    (botao || el('filtro-busca')).focus();
+    linhaDaAcao = null;
+}
+
+/** Depois de pagar ou excluir: fecha a janela, mostra o aviso verde e recarrega a lista. */
+function concluirAcaoDaLista(idDialogo, mensagem) {
+    el(idDialogo).close();
+    linhaDaAcao = null;
+    escreverAviso('mensagem-pendentes', mensagem);
+    el('filtro-busca').focus();
+    carregarPendentes();
+}
+
+/** Caixinha de uma parcela na janela de pagamento. */
+function criarEscolhaParcela(p, marcada) {
+    const rotulo = document.createElement('label');
+    rotulo.className = 'escolha';
+    const caixa = document.createElement('input');
+    caixa.type = 'checkbox';
+    caixa.value = p.idParcela;
+    caixa.checked = marcada;
+    caixa.addEventListener('change', atualizarMarcarTodas);
+    const texto = document.createElement('span');
+    texto.textContent = `${p.numeroParcela}/${p.totalParcelas} — ${formatarMoeda(p.valor)}, vence em ${formatarData(p.dataVencimento)}`;
+    rotulo.append(caixa, texto);
+    return rotulo;
+}
+
+/** Caixinhas das parcelas (não inclui a "Todas"). */
+function caixasDeParcela() {
+    return [...el('pagar-parcelas').querySelectorAll('input[type="checkbox"]')];
+}
+
+/** A caixinha "Todas" fica marcada quando todas estão marcadas (e "meio marcada" se só algumas). */
+function atualizarMarcarTodas() {
+    const caixas = caixasDeParcela();
+    const marcadas = caixas.filter((c) => c.checked).length;
+    el('pagar-todas').checked = marcadas === caixas.length;
+    el('pagar-todas').indeterminate = marcadas > 0 && marcadas < caixas.length;
+    escreverAviso('erro-pagar', '');
+}
+
+/** "Todas as parcelas pendentes": marca ou desmarca todas de uma vez. */
+function marcarTodas() {
+    for (const caixa of caixasDeParcela()) {
+        caixa.checked = el('pagar-todas').checked;
+    }
+    atualizarMarcarTodas();
+}
+
+/**
+ * Botão ✓ da linha: busca a cobrança para listar TODAS as parcelas
+ * pendentes dela (a lista pode estar filtrada e mostrar só algumas).
+ */
+async function abrirPagar(p) {
+    escreverAviso('erro-pendentes', '');
+    let detalhe;
+    try {
+        detalhe = await chamarApi(`/api/cobrancas/${encodeURIComponent(p.idCobranca)}`);
+    } catch (e) {
+        escreverAviso('erro-pendentes', e.message);
+        return;
+    }
+    linhaDaAcao = p;
+    const pendentes = detalhe.parcelas.filter((x) => x.status !== 'paga');
+    el('pagar-cliente').textContent = `${detalhe.nomeCliente} — cobrança nº ${detalhe.idCobranca}`;
+    el('pagar-parcelas').replaceChildren(
+        ...pendentes.map((x) => criarEscolhaParcela(x, x.idParcela === p.idParcela)));
+    el('pagar-data').max = dataDaquiA(0);   // o calendário não oferece datas futuras
+    el('pagar-data').value = dataDaquiA(0);
+    atualizarMarcarTodas();
+    el('dialogo-pagar').showModal();
+}
+
+/** "Confirmar pagamento": manda os ids marcados e a data para POST /api/pagamentos. */
+async function confirmarPagar(evento) {
+    evento.preventDefault();
+    const ids = caixasDeParcela().filter((c) => c.checked).map((c) => Number(c.value));
+    if (ids.length === 0) {
+        escreverAviso('erro-pagar', 'Marque ao menos uma parcela.');
+        return;
+    }
+    const botao = el('botao-confirmar-pagar');
+    botao.disabled = true;
+    try {
+        const resposta = await chamarApi('/api/pagamentos', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ idsParcelas: ids, dataPagamento: el('pagar-data').value }),
+        });
+        concluirAcaoDaLista('dialogo-pagar', resposta.mensagem);
+    } catch (e) {
+        escreverAviso('erro-pagar', e.message);   // ex.: alguém pagou uma delas nesse meio-tempo
+    } finally {
+        botao.disabled = false;
+    }
+}
+
+/** Lixeira da linha: pergunta se é só a parcela ou a cobrança inteira. */
+function abrirExcluir(p) {
+    linhaDaAcao = p;
+    escreverAviso('erro-pendentes', '');
+    escreverAviso('erro-excluir', '');
+    const [, total] = p.parcela.split('/');   // "2/3" -> total "3"
+    el('titulo-excluir').textContent = `Excluir a parcela ${p.parcela}?`;
+    el('excluir-cliente').textContent = `${p.nome} — cobrança nº ${p.idCobranca}, ${formatarMoeda(p.valor)}`;
+    el('botao-excluir-parcela').textContent = `Excluir só a parcela ${p.parcela}`;
+    el('botao-excluir-tudo').textContent = total === '1'
+        ? 'Excluir a cobrança'
+        : `Excluir a cobrança inteira (${total} parcelas)`;
+    // À vista (1/1) não dá para excluir "só a parcela": o banco recusaria.
+    el('botao-excluir-parcela').hidden = total === '1';
+    el('excluir-dica').hidden = total === '1';
+    el('dialogo-excluir').showModal();
+    el('botao-cancelar-excluir').focus();   // o foco começa no botão que não apaga nada
+}
+
+/** Roda a exclusão escolhida (DELETE na parcela ou na cobrança). */
+async function confirmarExcluir(url) {
+    const botoes = el('dialogo-excluir').querySelectorAll('button');
+    botoes.forEach((b) => { b.disabled = true; });
+    try {
+        const resposta = await chamarApi(url, { method: 'DELETE' });
+        concluirAcaoDaLista('dialogo-excluir', resposta.mensagem);
+    } catch (e) {
+        escreverAviso('erro-excluir', e.message);   // ex.: a cobrança tem parcela paga
+    } finally {
+        botoes.forEach((b) => { b.disabled = false; });
+    }
+}
+
+// ---------------------------------------------------------------------
+// 10) Início: roda quando a página termina de carregar
 // ---------------------------------------------------------------------
 document.addEventListener('DOMContentLoaded', () => {
     el('data-hoje').textContent = formatarData(dataDaquiA(0));   // "Hoje: dd/mm/aaaa" no topo
@@ -949,6 +1120,26 @@ document.addEventListener('DOMContentLoaded', () => {
     el('form-edicao-cobranca').addEventListener('submit', salvarEdicaoCobranca);
     el('form-edicao-cobranca').addEventListener('input', () => escreverAviso('erro-detalhe', ''));
     el('botao-cancelar-cobranca').addEventListener('click', cancelarEdicaoCobranca);
+    // US07: janelas abertas pelos botões da lista
+    el('form-pagar').addEventListener('submit', confirmarPagar);
+    el('pagar-todas').addEventListener('change', marcarTodas);
+    el('pagar-data').addEventListener('input', () => escreverAviso('erro-pagar', ''));
+    el('botao-cancelar-pagar').addEventListener('click', () => fecharJanelaDaLista('dialogo-pagar', 'botao-icone-pagar'));
+    el('botao-excluir-parcela').addEventListener('click',
+        () => confirmarExcluir(`/api/parcelas/${linhaDaAcao.idParcela}`));
+    el('botao-excluir-tudo').addEventListener('click',
+        () => confirmarExcluir(`/api/cobrancas/${linhaDaAcao.idCobranca}`));
+    el('botao-cancelar-excluir').addEventListener('click', () => fecharJanelaDaLista('dialogo-excluir', 'botao-icone-excluir'));
+    // Esc: fecha do nosso jeito, devolvendo o foco (como no painel de detalhe).
+    el('dialogo-pagar').addEventListener('cancel', (e) => {
+        e.preventDefault();
+        fecharJanelaDaLista('dialogo-pagar', 'botao-icone-pagar');
+    });
+    el('dialogo-excluir').addEventListener('cancel', (e) => {
+        e.preventDefault();
+        fecharJanelaDaLista('dialogo-excluir', 'botao-icone-excluir');
+    });
+
     // US06: data do pagamento
     el('form-pagamento').addEventListener('submit', salvarPagamento);
     el('form-pagamento').addEventListener('input', () => escreverAviso('erro-detalhe', ''));

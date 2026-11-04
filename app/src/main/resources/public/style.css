@@ -956,6 +956,108 @@ p {
     gap: 8px;
 }
 
+/* ---------------------------------------------------------------------
+   US07: botões de ícone na lista (editar, marcar como paga, excluir)
+   --------------------------------------------------------------------- */
+.acoes-linha {
+    display: flex;
+    gap: 6px;
+}
+
+.botao-icone {
+    display: inline-grid;
+    place-items: center;
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    color: var(--cor-primaria);
+    background: var(--cor-cartao);
+    border: 1px solid var(--cor-borda-campo);
+    border-radius: 8px;
+    cursor: pointer;
+}
+
+.botao-icone svg {
+    width: 20px;
+    height: 20px;
+}
+
+.botao-icone:hover {
+    background: var(--cor-primaria-clara);
+}
+
+.botao-icone-pagar {
+    color: var(--cor-paga-texto);
+}
+
+.botao-icone-pagar:hover {
+    background: var(--cor-paga-fundo);
+}
+
+.botao-icone-excluir {
+    color: var(--cor-perigo);
+}
+
+.botao-icone-excluir:hover {
+    background: var(--cor-perigo-fundo);
+}
+
+/* Janelas menores (pagar e excluir) */
+.dialogo-pequeno {
+    width: min(520px, calc(100vw - 24px));
+}
+
+.dialogo-subtitulo {
+    margin: -8px 0 16px;
+    color: var(--cor-texto-suave);
+    font-weight: 600;
+}
+
+/* Lista de caixinhas das parcelas */
+.lista-escolha {
+    margin: 0 0 16px;
+    padding: 12px 16px;
+    border: 1px solid var(--cor-borda-campo);
+    border-radius: var(--raio-campo);
+}
+
+.lista-escolha legend {
+    padding: 0 6px;
+    font-weight: 700;
+}
+
+.escolha {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 40px;                 /* área de clique confortável */
+    cursor: pointer;
+    font-variant-numeric: tabular-nums;
+}
+
+.escolha input {
+    width: 18px;
+    height: 18px;
+    flex: none;
+}
+
+.escolha-todas {
+    font-weight: 700;
+    border-bottom: 1px solid var(--cor-borda);
+    margin-bottom: 4px;
+}
+
+/* Botões da janela de excluir, um embaixo do outro */
+.opcoes-excluir {
+    display: grid;
+    gap: 10px;
+    margin-top: 16px;
+}
+
+.opcoes-excluir [hidden] {
+    display: none;
+}
+
 /* US06: célula "Pagamento" do painel — a data em cima, a etiqueta embaixo */
 .data-pagamento {
     display: block;

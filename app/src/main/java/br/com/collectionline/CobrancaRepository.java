@@ -281,6 +281,29 @@ public class CobrancaRepository {
         return executarAcaoNaParcela("SELECT pagar_parcela(?, ?)", idParcela, dataPagamento);
     }
 
+    /**
+     * US07: paga várias parcelas na mesma data, pela função do banco (tudo ou
+     * nada). O Java só transforma a lista num array do PostgreSQL (INTEGER[]).
+     * Devolve quantas foram pagas.
+     */
+    public int pagarParcelas(List<Integer> idsParcelas, LocalDate dataPagamento) throws SQLException {
+        try (Connection conn = database.abrirConexao();
+             PreparedStatement ps = conn.prepareStatement("SELECT pagar_parcelas(?, ?)")) {
+            ps.setArray(1, conn.createArrayOf("integer", idsParcelas.toArray()));
+            ps.setObject(2, dataPagamento);
+            return lerInteiro(ps);
+        }
+    }
+
+    /** US07: exclui uma parcela só (a função do banco renumera as outras). Devolve o id da cobrança. */
+    public int excluirParcela(int idParcela) throws SQLException {
+        try (Connection conn = database.abrirConexao();
+             PreparedStatement ps = conn.prepareStatement("SELECT excluir_parcela(?)")) {
+            ps.setInt(1, idParcela);
+            return lerInteiro(ps);
+        }
+    }
+
     /** US06: corrige a data de um pagamento já feito e devolve a cobrança atualizada. */
     public CobrancaDetalheDTO editarPagamento(int idParcela, LocalDate dataPagamento) throws SQLException {
         return executarAcaoNaParcela("SELECT editar_pagamento_parcela(?, ?)", idParcela, dataPagamento);
