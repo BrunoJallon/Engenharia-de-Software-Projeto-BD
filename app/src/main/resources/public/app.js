@@ -2,6 +2,7 @@
 // CollectionLine — lógica da tela
 // US01: cadastrar cobrança parcelada · US02: editar e pagar parcelas
 // (painel de detalhe) · US03: pesquisar parcelas pendentes (filtros e ordem)
+// US04: editar e excluir a cobrança inteira (também no painel de detalhe)
 // A tela NÃO calcula parcelas (nem como prévia) e NÃO faz contas com
 // dinheiro: ela só envia os dados para a API e mostra o que o banco
 // respondeu. A regra de negócio fica no banco de dados.
@@ -190,18 +191,24 @@ function criarCelulaSituacao(dias) {
 // 5) Ações da tela
 // ---------------------------------------------------------------------
 
-/** Busca os clientes e preenche os dois selects (formulário e filtro). */
+/**
+ * Busca os clientes e preenche os três selects: cadastro, filtro da lista
+ * e o "Editar cobrança" do painel de detalhe (US04).
+ */
 async function carregarClientes() {
     try {
         const clientes = await chamarApi('/api/clientes');
         const selectCliente = el('cliente');
         const selectFiltro = el('filtro-cliente');
+        const selectEdicao = el('edicao-cob-cliente');
         selectCliente.length = 1;   // mantém só a primeira opção ("Selecione um cliente")
         selectFiltro.length = 1;    // mantém só "Todos os clientes"
+        selectEdicao.length = 0;    // na edição sempre há um cliente escolhido
         for (const cliente of clientes) {
             const texto = `${cliente.nome} — ${formatarCpf(cliente.cpf)}`;   // "Nome — 000.000.000-00"
             selectCliente.add(new Option(texto, cliente.cpf));
             selectFiltro.add(new Option(texto, cliente.cpf));
+            selectEdicao.add(new Option(texto, cliente.cpf));
         }
     } catch (e) {
         mostrarErro(e.message);
@@ -452,6 +459,11 @@ function atualizarIndicadoresOrdem() {
 let cobrancaAberta = null;
 let parcelaEmEdicao = null;
 
+// US04: último detalhe mostrado no painel (para preencher "Editar cobrança")
+// e se alguma parcela dele está paga (aí a cobrança não pode mudar).
+let detalheAtual = null;
+let temParcelaPaga = false;
+
 /** Apaga as duas mensagens do painel. */
 function limparAvisosDetalhe() {
     escreverAviso('mensagem-detalhe', '');
@@ -525,6 +537,22 @@ function mostrarDetalhe(d) {
     for (const p of d.parcelas) {
         corpo.append(criarLinhaDetalhe(p));
     }
+    detalheAtual = d;
+    temParcelaPaga = d.parcelas.some((p) => p.status === 'paga');   // alguma parcela paga?
+    atualizarBotoesCobranca();
+}
+
+/**
+ * US04: com alguma parcela paga, "Editar cobrança" e "Excluir cobrança"
+ * ficam desabilitados e a explicação aparece. Sem parcela paga, liberados.
+ */
+function atualizarBotoesCobranca() {
+    el('botao-editar-cobranca').disabled = temParcelaPaga;
+    el('botao-excluir-cobranca').disabled = temParcelaPaga;
+    el('aviso-cobranca-paga').hidden = !temParcelaPaga;
+    if (temParcelaPaga) {
+        fecharEdicaoCobranca();   // não deixa um formulário aberto que não pode ser salvo
+    }
 }
 
 /** Busca o detalhe de uma cobrança e abre o painel. */
@@ -533,7 +561,9 @@ async function abrirDetalhe(idCobranca) {
         const detalhe = await chamarApi(`/api/cobrancas/${encodeURIComponent(idCobranca)}`);
         cobrancaAberta = idCobranca;
         fecharEdicao();
+        fecharEdicaoCobranca();
         limparAvisosDetalhe();
+        escreverAviso('mensagem-pendentes', '');   // apaga um aviso antigo da lista
         mostrarDetalhe(detalhe);
         el('dialogo-cobranca').showModal();   // modal: foco preso e Esc fecha
     } catch (e) {
@@ -552,6 +582,7 @@ async function abrirDetalhe(idCobranca) {
 function fecharDetalhe() {
     el('dialogo-cobranca').close();
     fecharEdicao();
+    fecharEdicaoCobranca();
     limparAvisosDetalhe();
     const botao = document.querySelector(`#corpo-pendentes [data-cobranca="${cobrancaAberta}"]`);
     (botao || el('filtro-busca')).focus();
@@ -568,6 +599,9 @@ function travarPainel(travar) {
     for (const botao of el('dialogo-cobranca').querySelectorAll('.acao')) {
         botao.disabled = travar;
     }
+    if (!travar) {
+        atualizarBotoesCobranca();   // ao liberar, os botões da cobrança seguem a regra da US04
+    }
 }
 
 /**
@@ -583,6 +617,7 @@ async function executarAcao(botao, textoSucesso, url, opcoes) {
         const detalhe = await chamarApi(url, opcoes);
         mostrarDetalhe(detalhe);   // a tabela é refeita com o que o banco gravou
         fecharEdicao();
+        fecharEdicaoCobranca();
         escreverAviso('mensagem-detalhe', textoSucesso);
         deuCerto = true;
         carregarPendentes();
@@ -615,6 +650,7 @@ function desfazerPagamento(p, rotulo, botao) {
 /** "Editar": mostra o formulário pequeno já preenchido com os dados atuais. */
 function abrirEdicao(p, rotulo) {
     parcelaEmEdicao = { idParcela: p.idParcela, rotulo };
+    fecharEdicaoCobranca();   // um formulário de cada vez
     limparAvisosDetalhe();
     el('legenda-edicao').textContent = `Editar parcela ${rotulo}`;
     el('edicao-valor').value = String(p.valor);         // só copia o texto do valor
@@ -650,7 +686,92 @@ function salvarEdicao(evento) {
 }
 
 // ---------------------------------------------------------------------
-// 8) Início: roda quando a página termina de carregar
+// 8) Editar e excluir a cobrança inteira (US04), dentro do painel
+// ---------------------------------------------------------------------
+
+/** "Editar cobrança": mostra o formulário preenchido com os dados atuais. */
+function abrirEdicaoCobranca() {
+    const d = detalheAtual;
+    const primeira = d.parcelas.find((p) => p.numeroParcela === 1);   // a parcela 1
+    fecharEdicao();   // um formulário de cada vez
+    limparAvisosDetalhe();
+    el('legenda-edicao-cobranca').textContent = `Editar cobrança nº ${d.idCobranca}`;
+    el('edicao-cob-cliente').value = d.cpfCliente;
+    el('edicao-cob-valor').value = String(d.valor);              // só copia o texto do valor
+    el('edicao-cob-qtd').value = String(primeira.totalParcelas);  // quantidade atual de parcelas
+    el('edicao-cob-vencimento').value = primeira.dataVencimento;  // vencimento da parcela 1
+    el('form-edicao-cobranca').hidden = false;
+    el('edicao-cob-cliente').focus();
+}
+
+/** Esconde o formulário "Editar cobrança". */
+function fecharEdicaoCobranca() {
+    el('form-edicao-cobranca').hidden = true;
+}
+
+/** "Cancelar" do formulário da cobrança. */
+function cancelarEdicaoCobranca() {
+    fecharEdicaoCobranca();
+    el('titulo-detalhe').focus();
+}
+
+/**
+ * "Salvar": PUT /api/cobrancas/{id} com os mesmos campos do cadastro.
+ * O banco apaga as parcelas e gera tudo de novo; a tela só mostra o resultado.
+ */
+function salvarEdicaoCobranca(evento) {
+    evento.preventDefault();   // impede o envio "nativo" do formulário
+    const id = cobrancaAberta;
+    executarAcao(el('botao-salvar-cobranca'), `Cobrança nº ${id} atualizada: as parcelas foram recalculadas.`,
+        `/api/cobrancas/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                cpfCliente: el('edicao-cob-cliente').value,
+                valor: el('edicao-cob-valor').value,          // TEXTO, como no cadastro
+                qtdParcelas: el('edicao-cob-qtd').value,
+                primeiroVencimento: el('edicao-cob-vencimento').value,
+            }),
+        });
+}
+
+/**
+ * "Excluir cobrança": pede confirmação e chama DELETE /api/cobrancas/{id}.
+ * Sucesso: fecha o painel, mostra a mensagem da API na seção de pendentes,
+ * recarrega a lista e põe o foco na busca (o botão "nº X" deixou de existir).
+ */
+async function excluirCobranca() {
+    const id = cobrancaAberta;
+    const confirmou = window.confirm(`Excluir a cobrança nº ${id} e todas as suas parcelas? Isso não pode ser desfeito.`);
+    if (!confirmou) {
+        return;   // "Cancelar" na confirmação: nada acontece
+    }
+    limparAvisosDetalhe();
+    travarPainel(true);
+    let resposta = null;
+    try {
+        resposta = await chamarApi(`/api/cobrancas/${id}`, { method: 'DELETE' });
+    } catch (e) {
+        escreverAviso('erro-detalhe', e.message);   // por exemplo, 409 se alguém pagou uma parcela
+    }
+    travarPainel(false);
+    if (resposta === null) {
+        // Deu erro: o painel continua aberto. Se o botão ficou desabilitado
+        // (a cobrança tem parcela paga), o foco vai para o título do painel.
+        const botao = el('botao-excluir-cobranca');
+        (botao.disabled ? el('titulo-detalhe') : botao).focus();
+        return;
+    }
+    el('dialogo-cobranca').close();
+    fecharEdicao();
+    fecharEdicaoCobranca();
+    escreverAviso('mensagem-pendentes', resposta.mensagem);   // "Cobrança nº X excluída."
+    el('filtro-busca').focus();
+    carregarPendentes();
+}
+
+// ---------------------------------------------------------------------
+// 9) Início: roda quando a página termina de carregar
 // ---------------------------------------------------------------------
 document.addEventListener('DOMContentLoaded', () => {
     el('data-hoje').textContent = formatarData(dataDaquiA(0));   // "Hoje: dd/mm/aaaa" no topo
@@ -678,6 +799,13 @@ document.addEventListener('DOMContentLoaded', () => {
     el('form-edicao').addEventListener('submit', salvarEdicao);
     el('form-edicao').addEventListener('input', () => escreverAviso('erro-detalhe', ''));
     el('botao-cancelar-edicao').addEventListener('click', cancelarEdicao);
+
+    // US04: editar e excluir a cobrança
+    el('botao-editar-cobranca').addEventListener('click', abrirEdicaoCobranca);
+    el('botao-excluir-cobranca').addEventListener('click', excluirCobranca);
+    el('form-edicao-cobranca').addEventListener('submit', salvarEdicaoCobranca);
+    el('form-edicao-cobranca').addEventListener('input', () => escreverAviso('erro-detalhe', ''));
+    el('botao-cancelar-cobranca').addEventListener('click', cancelarEdicaoCobranca);
 
     atualizarIndicadoresOrdem();
     carregarClientes();

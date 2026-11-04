@@ -60,6 +60,10 @@
     --cor-a-vencer-borda: #d3dbe6;
     --cor-a-vencer-texto: #3c4859;    /* 8,2:1 */
 
+    /* Ação perigosa (US04: excluir cobrança) */
+    --cor-perigo: #b42318;            /* 6,6:1 no branco; 5,9:1 no fundo vermelho-claro */
+    --cor-perigo-fundo: #fdeeee;      /* fundo do botão com o mouse em cima */
+
     /* Parcela paga (US02): verde, como o aviso de sucesso */
     --cor-paga-fundo: #e9f7ef;
     --cor-paga-borda: #9fd4b4;
@@ -785,6 +789,17 @@ p {
     cursor: progress;
 }
 
+/* Botão de perigo (Excluir): mesmo formato do secundário, em vermelho.
+   :not(:disabled) = o efeito do mouse só vale com o botão habilitado. */
+.botao-perigo:not(:disabled) {
+    color: var(--cor-perigo);
+    border-color: var(--cor-perigo);
+}
+
+.botao-perigo:not(:disabled):hover {
+    background: var(--cor-perigo-fundo);
+}
+
 /* Versão menor, para caber nas linhas da tabela */
 .botao-pequeno {
     min-height: 40px;
@@ -901,6 +916,25 @@ p {
 
 .tabela-detalhe {
     margin-top: 20px;
+}
+
+/* US04: botões "Editar cobrança" e "Excluir cobrança" */
+.acoes-cobranca {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-top: 16px;
+}
+
+/* Explicação quando a cobrança tem parcela paga */
+.aviso-travada {
+    margin: 8px 0 0;
+    font-weight: 600;
+}
+
+/* No formulário "Editar cobrança", o Cliente ocupa a linha inteira */
+.campos-edicao .campo-inteiro {
+    grid-column: 1 / -1;
 }
 
 /* Botões de ação lado a lado dentro da célula */

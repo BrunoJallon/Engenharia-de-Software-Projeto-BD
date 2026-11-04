@@ -217,6 +217,16 @@
                 </div>
             </div>
 
+            <!-- Mensagem de sucesso da lista (ex.: "Cobrança nº X excluída.") -->
+            <div class="aviso aviso-sucesso aviso-pendentes">
+                <svg class="aviso-icone" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                     stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <circle cx="12" cy="12" r="10"/>
+                    <path d="M7.5 12.5l3 3 6-6.5"/>
+                </svg>
+                <p id="mensagem-pendentes" role="status" aria-live="polite"></p>
+            </div>
+
             <div class="aviso aviso-erro aviso-pendentes">
                 <svg class="aviso-icone" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                      stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -286,6 +296,49 @@
             <div><dt>Valor total</dt><dd id="detalhe-valor"></dd></div>
             <div><dt>Status</dt><dd id="detalhe-status"></dd></div>
         </dl>
+
+        <!-- US04: ações da cobrança inteira. Só valem enquanto nenhuma parcela
+             estiver paga; nesse caso o app.js desabilita os botões e mostra a
+             explicação abaixo (o banco também recusa, com erro 409). -->
+        <div class="acoes-cobranca">
+            <button type="button" id="botao-editar-cobranca" class="botao-secundario acao">Editar cobrança</button>
+            <button type="button" id="botao-excluir-cobranca" class="botao-secundario botao-perigo acao">Excluir cobrança</button>
+        </div>
+        <p id="aviso-cobranca-paga" class="dica aviso-travada" hidden>Para editar ou excluir a cobrança, desfaça os pagamentos antes.</p>
+
+        <!-- Formulário "Editar cobrança" (aparece ao clicar no botão). Mesmos
+             campos do cadastro; sem "min" na data: quem valida é o banco. -->
+        <form id="form-edicao-cobranca" class="form-edicao" hidden>
+            <fieldset>
+                <legend id="legenda-edicao-cobranca">Editar cobrança</legend>
+                <p class="dica" id="dica-edicao-cobranca">Ao salvar, o banco apaga as parcelas e calcula todas de novo.</p>
+                <div class="campos-edicao">
+                    <div class="campo campo-inteiro">
+                        <label for="edicao-cob-cliente">Cliente</label>
+                        <select id="edicao-cob-cliente" required aria-describedby="dica-edicao-cobranca"></select>
+                    </div>
+                    <div class="campo">
+                        <label for="edicao-cob-valor">Valor total (R$)</label>
+                        <div class="campo-moeda">
+                            <span class="prefixo" aria-hidden="true">R$</span>
+                            <input type="number" id="edicao-cob-valor" min="0.01" step="0.01" inputmode="decimal" required>
+                        </div>
+                    </div>
+                    <div class="campo">
+                        <label for="edicao-cob-qtd">Quantidade de parcelas</label>
+                        <input type="number" id="edicao-cob-qtd" min="1" step="1" required>
+                    </div>
+                    <div class="campo">
+                        <label for="edicao-cob-vencimento">Primeiro vencimento</label>
+                        <input type="date" id="edicao-cob-vencimento" required>
+                    </div>
+                </div>
+                <div class="acoes-edicao">
+                    <button type="submit" id="botao-salvar-cobranca" class="botao-principal acao">Salvar</button>
+                    <button type="button" id="botao-cancelar-cobranca" class="botao-secundario acao">Cancelar</button>
+                </div>
+            </fieldset>
+        </form>
 
         <!-- Avisos do painel (mesma ideia dos avisos do formulário) -->
         <div class="aviso aviso-sucesso">
