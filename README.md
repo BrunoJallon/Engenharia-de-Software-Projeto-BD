@@ -419,4 +419,58 @@ TODOS OS TESTES DA US03 PASSARAM
 
 - Guardar data e valor de cada pagamento (a entidade Pagamento do DER continua fora do recorte).
 - Pagamento parcial de uma parcela.
-- Excluir parcelas ou mudar a quantidade de parcelas de uma cobrança.
+- Excluir parcelas ou mudar a quantidade de parcelas de uma cobrança (feito na US04, abaixo).
+
+---
+
+## Iteração 3: US04
+
+> **COMO** operador da loja **EU QUERO** editar ou excluir uma cobrança cadastrada **PARA QUE** eu corrija erros de cadastro (cliente errado, valor, quantidade de parcelas ou primeiro vencimento).
+
+Regras decididas pelo cliente, todas no banco ([`sql/07_funcoes_us04.sql`](sql/07_funcoes_us04.sql)):
+
+- **Só sem pagamento:** editar ou excluir só é possível enquanto nenhuma parcela da cobrança estiver paga (senão `object_not_in_prerequisite_state` → HTTP 409). Para corrigir, desfaz-se o pagamento antes.
+- **Editar** troca cliente, valor total, quantidade e primeiro vencimento. As parcelas são apagadas e geradas de novo com a **mesma regra do cadastro** (valor truncado com a sobra na última; meses sempre a partir do primeiro vencimento), com as mesmas validações. A data de emissão não muda.
+- **Excluir** apaga a cobrança e, pelo `ON DELETE CASCADE`, as parcelas. A tela pede confirmação antes.
+- Cada função trava a cobrança (`FOR UPDATE`), como na US02.
+
+| CA | Critério | Resultado esperado |
+|---|---|---|
+| **CA1** | Mudar valor e quantidade | R$ 100,00 em 3x vira R$ 200,00 em 4x: quatro parcelas de 50,00, todas x/4 e pendentes; vencimento da cobrança = o da última; emissão igual |
+| **CA2** | Mudar o primeiro vencimento | 31/01/2027 em 3x → 31/01, 28/02 e 31/03, com 33,33 + 33,33 + 33,34 |
+| **CA3** | Trocar o cliente | a cobrança e as parcelas pendentes passam para o novo cliente |
+| **CA4** | Dados inválidos | valor 0, 0,02 em 3x, vencimento antes da emissão, 361 parcelas → `invalid_parameter_value`; cliente ou cobrança inexistente → `no_data_found`; nada muda |
+| **CA5** | Com parcela paga | editar → `object_not_in_prerequisite_state`; nada muda |
+| **CA6** | Excluir | a cobrança e as parcelas somem |
+| **CA7** | Não exclui | com parcela paga → `object_not_in_prerequisite_state`; inexistente → `no_data_found` |
+
+| método e caminho | o que faz | resposta |
+|---|---|---|
+| `PUT /api/cobrancas/{id}` | recebe os mesmos campos do cadastro (`cpfCliente`, `valor`, `qtdParcelas`, `primeiroVencimento`) e chama `editar_cobranca` | 200 com o detalhe atualizado; 400, 404 ou 409 |
+| `DELETE /api/cobrancas/{id}` | chama `excluir_cobranca` | 200 `{"mensagem": "Cobrança nº X excluída."}`; 404 ou 409 |
+
+No Java, a leitura e a conferência dos campos da cobrança ficaram num método só (`lerDadosCobranca`), usado pelo cadastro e pela edição.
+
+Saída esperada dos testes da US04:
+
+```text
+psql:testes/testes_us04.sql:47: NOTA:  OK  CA1 - mudar valor e quantidade recalcula as parcelas (100,00 em 3x -> 200,00 em 4x)
+psql:testes/testes_us04.sql:70: NOTA:  OK  CA2 - mudar o 1º vencimento refaz as datas com a regra do cadastro
+psql:testes/testes_us04.sql:91: NOTA:  OK  CA3 - trocar o cliente da cobrança
+psql:testes/testes_us04.sql:160: NOTA:  OK  CA4 - dados inválidos são recusados (6 casos)
+psql:testes/testes_us04.sql:186: NOTA:  OK  CA5 - cobrança com parcela paga não pode ser editada
+psql:testes/testes_us04.sql:206: NOTA:  OK  CA6 - excluir apaga a cobrança e as parcelas
+psql:testes/testes_us04.sql:236: NOTA:  OK  CA7 - não exclui cobrança com parcela paga nem inexistente
+TODOS OS TESTES DA US04 PASSARAM
+```
+
+Roteiro de teste manual da US04 (no painel de detalhe, aberto pelo "nº X"):
+
+| # | Passo | Resultado esperado | CA |
+|---|---|---|---|
+| 1 | "Editar cobrança": R$ 200,00 em 4x | quatro parcelas de R$ 50,00 | CA1 |
+| 2 | Primeiro vencimento 31/01/2027 em 3x | 31/01, 28/02 e 31/03 | CA2 |
+| 3 | Trocar o cliente | a lista de pendentes mostra o novo nome | CA3 |
+| 4 | R$ 0,02 em 3x | mensagem de erro do banco no painel | CA4 |
+| 5 | Pagar uma parcela e tentar editar ou excluir a cobrança | botões desabilitados, com a explicação | CA5 e CA7 |
+| 6 | "Excluir cobrança" e confirmar | a cobrança some da lista | CA6 |
