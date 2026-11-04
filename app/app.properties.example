@@ -1,0 +1,6 @@
+# Copie este arquivo para app.properties (na mesma pasta) e preencha a senha.
+# O app.properties está no .gitignore: a senha nunca vai para o repositório.
+db.url=jdbc:postgresql://localhost:5432/collectionline_xp
+db.user=postgres
+db.password=
+server.port=8080
