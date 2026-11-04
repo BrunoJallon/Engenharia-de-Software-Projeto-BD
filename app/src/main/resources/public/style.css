@@ -267,6 +267,18 @@ p {
 
 .cartao-cabecalho {
     margin-bottom: 24px;
+    display: flex;
+    flex-wrap: wrap;                  /* no celular, os botões descem para baixo do título */
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px 16px;
+}
+
+/* US05: botões "Baixar CSV" e "Baixar Excel" */
+.acoes-planilha {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
 }
 
 /* Ícone + título + descrição, lado a lado */

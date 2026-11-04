@@ -1,6 +1,7 @@
 package br.com.collectionline;
 
 import br.com.collectionline.dto.CobrancaDetalheDTO;
+import br.com.collectionline.dto.CobrancaResumoDTO;
 import br.com.collectionline.dto.EditarParcelaRequest;
 import br.com.collectionline.dto.FiltroPendentes;
 import br.com.collectionline.dto.MensagemResponse;
@@ -19,6 +20,7 @@ import java.nio.charset.StandardCharsets;
 import java.sql.SQLException;
 import java.time.LocalDate;
 import java.time.format.DateTimeParseException;
+import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -71,6 +73,10 @@ public class CobrancaController implements HttpHandler {
             } else if (caminho.equals("/api/parcelas-pendentes")) {
                 if (!exigirMetodo(exchange, metodo, "GET")) return;
                 listarPendentes(exchange);
+
+            } else if (caminho.equals("/api/planilha")) {                          // US05
+                if (!exigirMetodo(exchange, metodo, "GET")) return;
+                baixarPlanilha(exchange);
 
             } else if ((m = ROTA_COBRANCA.matcher(caminho)).matches()) {
                 int idCobranca = Integer.parseInt(m.group(1));
@@ -185,18 +191,63 @@ public class CobrancaController implements HttpHandler {
      * cpf (US01), busca, situacao, de, ate, ordem e direcao (US03).
      */
     private void listarPendentes(HttpExchange exchange) throws IOException, SQLException {
+        FiltroPendentes filtro = lerFiltroPendentes(exchange);
+        if (filtro == null) {
+            return; // lerFiltroPendentes já respondeu com o erro
+        }
+        JsonUtil.enviarJson(exchange, 200, repository.listarParcelasPendentes(filtro));
+    }
+
+    /**
+     * US05 — GET /api/planilha?formato=csv|xlsx, com os MESMOS filtros da
+     * pesquisa: o arquivo traz exatamente o que a lista da tela mostra.
+     * CSV = só o resumo das cobranças; XLSX = abas "Cobranças" e "Parcelas".
+     */
+    private void baixarPlanilha(HttpExchange exchange) throws IOException, SQLException {
+        String formato = lerParametro(exchange.getRequestURI().getRawQuery(), "formato");
+        if (!"csv".equals(formato) && !"xlsx".equals(formato)) {
+            JsonUtil.enviarErro(exchange, 400, "Formato inválido: use csv ou xlsx.");
+            return;
+        }
+        FiltroPendentes filtro = lerFiltroPendentes(exchange);
+        if (filtro == null) {
+            return;
+        }
+
+        List<CobrancaResumoDTO> cobrancas = repository.resumirCobrancas(filtro);
+        byte[] arquivo;
+        String contentType;
+        if (formato.equals("csv")) {
+            arquivo = PlanilhaCobrancas.gerarCsv(cobrancas);
+            contentType = "text/csv; charset=utf-8";
+        } else {
+            arquivo = PlanilhaCobrancas.gerarXlsx(cobrancas, repository.listarParcelasPendentes(filtro));
+            contentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+        }
+
+        // "attachment" faz o navegador baixar o arquivo em vez de abrir na aba.
+        exchange.getResponseHeaders().set("Content-Disposition",
+                "attachment; filename=\"" + PlanilhaCobrancas.nomeArquivo(formato) + "\"");
+        JsonUtil.enviarBytes(exchange, 200, contentType, arquivo);
+    }
+
+    /**
+     * Lê e confere o FORMATO dos filtros da pesquisa (usado pela lista e pela
+     * planilha). Se algo estiver errado, já responde 400 e devolve null.
+     */
+    private FiltroPendentes lerFiltroPendentes(HttpExchange exchange) throws IOException {
         String query = exchange.getRequestURI().getRawQuery();
 
         String cpf = lerParametro(query, "cpf");
         if (cpf != null && !CPF.matcher(cpf).matches()) {
             JsonUtil.enviarErro(exchange, 400, "O filtro cpf deve ter exatamente 11 dígitos.");
-            return;
+            return null;
         }
 
         String busca = lerParametro(query, "busca");
         if (busca != null && busca.length() > TAMANHO_MAXIMO_BUSCA) {
             JsonUtil.enviarErro(exchange, 400, "A busca pode ter no máximo " + TAMANHO_MAXIMO_BUSCA + " caracteres.");
-            return;
+            return null;
         }
 
         // A situação é conferida pela função do banco (valor inválido -> 400).
@@ -208,7 +259,7 @@ public class CobrancaController implements HttpHandler {
         LocalDate ate = textoAte == null ? null : lerData(textoAte);
         if ((textoDe != null && de == null) || (textoAte != null && ate == null)) {
             JsonUtil.enviarErro(exchange, 400, "Datas do período inválidas: use o formato aaaa-mm-dd.");
-            return;
+            return null;
         }
 
         // Ordenação: só nomes da lista fechada (o ORDER BY não aceita "?").
@@ -216,16 +267,15 @@ public class CobrancaController implements HttpHandler {
         if (ordem != null && !CobrancaRepository.COLUNAS_ORDENAVEIS.containsKey(ordem)) {
             JsonUtil.enviarErro(exchange, 400,
                     "Ordem inválida: use vencimento, valor, cliente ou cobranca.");
-            return;
+            return null;
         }
         String direcao = lerParametro(query, "direcao");
         if (direcao != null && !direcao.equals("asc") && !direcao.equals("desc")) {
             JsonUtil.enviarErro(exchange, 400, "Direção inválida: use asc ou desc.");
-            return;
+            return null;
         }
 
-        FiltroPendentes filtro = new FiltroPendentes(cpf, busca, situacao, de, ate, ordem, direcao);
-        JsonUtil.enviarJson(exchange, 200, repository.listarParcelasPendentes(filtro));
+        return new FiltroPendentes(cpf, busca, situacao, de, ate, ordem, direcao);
     }
 
     /** US02 — GET /api/cobrancas/{id} */

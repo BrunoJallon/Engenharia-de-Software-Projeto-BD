@@ -3,6 +3,7 @@ package br.com.collectionline;
 import br.com.collectionline.dto.ClienteDTO;
 import br.com.collectionline.dto.CobrancaCriadaResponse;
 import br.com.collectionline.dto.CobrancaDetalheDTO;
+import br.com.collectionline.dto.CobrancaResumoDTO;
 import br.com.collectionline.dto.FiltroPendentes;
 import br.com.collectionline.dto.ParcelaDTO;
 import br.com.collectionline.dto.ParcelaDetalheDTO;
@@ -157,6 +158,45 @@ public class CobrancaRepository {
                             rs.getObject("data_vencimento", LocalDate.class),
                             rs.getInt("dias_para_vencer"),
                             rs.getString("situacao")));
+                }
+            }
+        }
+        return lista;
+    }
+
+    /**
+     * US05: uma linha por cobrança que aparece na pesquisa (mesmos filtros).
+     * Os totais e a regra de quais cobranças entram vêm da função do banco.
+     */
+    public List<CobrancaResumoDTO> resumirCobrancas(FiltroPendentes filtro) throws SQLException {
+        String sql = """
+                SELECT id_cobranca, cpf, nome, telefone, data_emissao, data_vencimento, valor,
+                       qtd_parcelas, parcelas_pagas, parcelas_pendentes, valor_pendente, status_pagamento
+                  FROM resumir_cobrancas_pesquisadas(?::char(11), ?::text, ?::text, ?::date, ?::date)""";
+
+        List<CobrancaResumoDTO> lista = new ArrayList<>();
+        try (Connection conn = database.abrirConexao();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, filtro.cpf());
+            ps.setString(2, filtro.busca());
+            ps.setString(3, filtro.situacao());
+            ps.setObject(4, filtro.de());
+            ps.setObject(5, filtro.ate());
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    lista.add(new CobrancaResumoDTO(
+                            rs.getInt("id_cobranca"),
+                            rs.getString("cpf"),
+                            rs.getString("nome"),
+                            rs.getString("telefone"),
+                            rs.getObject("data_emissao", LocalDate.class),
+                            rs.getObject("data_vencimento", LocalDate.class),
+                            rs.getBigDecimal("valor"),
+                            rs.getInt("qtd_parcelas"),
+                            rs.getInt("parcelas_pagas"),
+                            rs.getInt("parcelas_pendentes"),
+                            rs.getBigDecimal("valor_pendente"),
+                            rs.getString("status_pagamento")));
                 }
             }
         }

@@ -305,6 +305,11 @@ let ultimaConsulta = 0;
  * os pares nome=valor e já codifica acentos, espaços e pontos do CPF.
  */
 function montarUrlPendentes() {
+    return `/api/parcelas-pendentes?${montarParametrosFiltro()}`;
+}
+
+/** Os filtros e a ordem atuais, como parâmetros da URL (usado pela lista e pela planilha). */
+function montarParametrosFiltro() {
     const parametros = new URLSearchParams();
     const busca = el('filtro-busca').value.trim();
     if (busca !== '') parametros.set('busca', busca);
@@ -314,7 +319,56 @@ function montarUrlPendentes() {
     if (el('filtro-ate').value !== '') parametros.set('ate', el('filtro-ate').value);
     parametros.set('ordem', ordemAtual);
     parametros.set('direcao', direcaoAtual);
-    return `/api/parcelas-pendentes?${parametros}`;
+    return parametros;
+}
+
+/**
+ * US05 — Botões "Baixar CSV" / "Baixar Excel": pede a planilha com os
+ * filtros de agora e entrega o arquivo para o navegador salvar.
+ * Usamos fetch (e não um simples link) para conseguir mostrar a mensagem
+ * de erro do servidor na tela, se algum filtro estiver inválido.
+ */
+async function baixarPlanilha(botao) {
+    const parametros = montarParametrosFiltro();
+    parametros.set('formato', botao.dataset.formato);
+    escreverAviso('erro-pendentes', '');
+    const textoOriginal = botao.textContent;
+    botao.disabled = true;
+    botao.textContent = 'Gerando...';
+
+    try {
+        let resposta;
+        try {
+            resposta = await fetch(`/api/planilha?${parametros}`);
+        } catch (e) {
+            throw new Error('Não foi possível falar com o servidor. Ele está rodando?');
+        }
+        if (!resposta.ok) {
+            const corpo = await resposta.json().catch(() => null);
+            throw new Error(corpo && corpo.erro ? corpo.erro : `Erro ${resposta.status} ao gerar a planilha.`);
+        }
+
+        // O nome do arquivo vem do servidor, no cabeçalho Content-Disposition.
+        const disposicao = resposta.headers.get('Content-Disposition') || '';
+        const nome = (disposicao.match(/filename="([^"]+)"/) || [])[1] || `cobrancas.${botao.dataset.formato}`;
+
+        // Truque para baixar: transforma o arquivo num endereço temporário
+        // (blob:) e "clica" num link invisível que aponta para ele.
+        const arquivo = await resposta.blob();
+        const endereco = URL.createObjectURL(arquivo);
+        const link = document.createElement('a');
+        link.href = endereco;
+        link.download = nome;
+        document.body.append(link);
+        link.click();
+        link.remove();
+        setTimeout(() => URL.revokeObjectURL(endereco), 1000);   // libera a memória
+    } catch (e) {
+        escreverAviso('erro-pendentes', e.message);
+    } finally {
+        botao.disabled = false;
+        botao.textContent = textoOriginal;
+    }
 }
 
 /** true se algum filtro estiver preenchido (muda o texto do estado vazio). */
@@ -789,6 +843,9 @@ document.addEventListener('DOMContentLoaded', () => {
         el(id).addEventListener('change', carregarPendentes);
     }
     el('botao-limpar-filtros').addEventListener('click', limparFiltros);
+    for (const id of ['botao-baixar-csv', 'botao-baixar-xlsx']) {               // US05
+        el(id).addEventListener('click', () => baixarPlanilha(el(id)));
+    }
     for (const botao of document.querySelectorAll('.botao-ordenar')) {
         botao.addEventListener('click', () => ordenarPor(botao.dataset.ordem));
     }
