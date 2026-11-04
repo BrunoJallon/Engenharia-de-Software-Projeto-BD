@@ -283,7 +283,29 @@ async function enviarCobranca(evento) {
 // ---------------------------------------------------------------------
 
 // Ids dos campos de filtro (usados para montar a URL e para "Limpar filtros").
-const CAMPOS_FILTRO = ['filtro-busca', 'filtro-cliente', 'filtro-situacao', 'filtro-de', 'filtro-ate'];
+// (US08: o filtro "Situação" saiu; as abas fazem esse papel.)
+const CAMPOS_FILTRO = ['filtro-busca', 'filtro-cliente', 'filtro-de', 'filtro-ate'];
+
+// US08: aba escolhida ('em_aberto', 'atrasadas' ou 'pagas') e o mês mostrado.
+// mesAtual = { ano, mes } (mes de 0 a 11, como no Date do JavaScript), ou
+// null quando a lista mostra todos os meses ou um período digitado à mão.
+let abaAtual = 'em_aberto';
+let mesAtual = null;
+
+// Endereço da API de cada aba. As duas primeiras são a pesquisa de pendentes
+// com uma situação; a de pagas é outra rota.
+const URL_DA_ABA = {
+    em_aberto: (p) => `/api/parcelas-pendentes?${p}&situacao=em_aberto`,
+    atrasadas: (p) => `/api/parcelas-pendentes?${p}&situacao=atrasada`,
+    pagas: (p) => `/api/parcelas-pagas?${p}`,
+};
+
+// Texto do estado vazio de cada aba (quando não há filtro de busca/cliente).
+const VAZIO_DA_ABA = {
+    em_aberto: 'Nenhuma parcela em aberto neste período.',
+    atrasadas: 'Nenhuma parcela atrasada neste período.',
+    pagas: 'Nenhuma parcela paga neste período.',
+};
 
 // Ordenação atual da tabela (padrão da API: vencimento crescente).
 let ordemAtual = 'vencimento';
@@ -301,20 +323,15 @@ let temporizadorBusca = null;
 let ultimaConsulta = 0;
 
 /**
- * Monta a URL da consulta com os filtros preenchidos. URLSearchParams junta
- * os pares nome=valor e já codifica acentos, espaços e pontos do CPF.
+ * Os filtros e a ordem atuais, como parâmetros da URL (usado pelas abas e
+ * pela planilha). URLSearchParams junta os pares nome=valor e já codifica
+ * acentos, espaços e pontos do CPF.
  */
-function montarUrlPendentes() {
-    return `/api/parcelas-pendentes?${montarParametrosFiltro()}`;
-}
-
-/** Os filtros e a ordem atuais, como parâmetros da URL (usado pela lista e pela planilha). */
 function montarParametrosFiltro() {
     const parametros = new URLSearchParams();
     const busca = el('filtro-busca').value.trim();
     if (busca !== '') parametros.set('busca', busca);
     if (el('filtro-cliente').value !== '') parametros.set('cpf', el('filtro-cliente').value);
-    if (el('filtro-situacao').value !== '') parametros.set('situacao', el('filtro-situacao').value);
     if (el('filtro-de').value !== '') parametros.set('de', el('filtro-de').value);
     if (el('filtro-ate').value !== '') parametros.set('ate', el('filtro-ate').value);
     parametros.set('ordem', ordemAtual);
@@ -371,19 +388,19 @@ async function baixarPlanilha(botao) {
     }
 }
 
-/** true se algum filtro estiver preenchido (muda o texto do estado vazio). */
+/** true se a busca ou o cliente estiverem preenchidos (o mês não conta). */
 function haFiltrosAtivos() {
-    return CAMPOS_FILTRO.some((id) => el(id).value.trim() !== '');
+    return ['filtro-busca', 'filtro-cliente'].some((id) => el(id).value.trim() !== '');
 }
 
-/** Textos do estado vazio: com filtros, a mensagem é outra. */
+/** Textos do estado vazio, conforme a aba e os filtros. */
 function atualizarTextoVazio() {
     if (haFiltrosAtivos()) {
         el('vazio-titulo').textContent = 'Nenhuma parcela encontrada com esses filtros.';
         el('vazio-texto').textContent = 'Mude os filtros ou clique em "Limpar filtros".';
     } else {
-        el('vazio-titulo').textContent = 'Nenhuma parcela pendente.';
-        el('vazio-texto').textContent = 'Cadastre uma cobrança para ver as parcelas aqui.';
+        el('vazio-titulo').textContent = VAZIO_DA_ABA[abaAtual];
+        el('vazio-texto').textContent = 'Use as setas para ver outro mês, ou "Todos os meses".';
     }
 }
 
@@ -447,19 +464,59 @@ function criarLinhaPendente(p) {
     return linha;
 }
 
-/** Lê as parcelas pendentes com os filtros e a ordem atuais e monta a tabela. */
+/**
+ * US08 — Linha da aba "Pagas": no lugar da situação vai o pagamento (data e
+ * "Em dia"/"Com atraso"); a única ação é o lápis, que abre o painel, onde
+ * dá para corrigir a data ou desfazer o pagamento.
+ */
+function criarLinhaPaga(p) {
+    const editar = criarBotaoIcone('editar', `Editar — parcela ${p.parcela} de ${p.nome}`, '',
+        () => abrirDetalhe(p.idCobranca));
+    editar.dataset.cobranca = p.idCobranca;
+    const caixa = document.createElement('div');
+    caixa.className = 'acoes-linha';
+    caixa.append(editar);
+    const tdAcoes = document.createElement('td');
+    tdAcoes.append(caixa);
+
+    const linha = document.createElement('tr');
+    linha.append(
+        criarCelula(String(p.idParcela), 'numero'),
+        criarCelula(p.nome, 'coluna-cliente'),
+        criarCelula(p.parcela),
+        criarCelula(formatarMoeda(p.valor), 'numero'),
+        criarCelula(formatarData(p.dataVencimento)),
+        criarCelulaPagamento({ ...p, status: 'paga' }),   // a mesma célula do painel (US06)
+        tdAcoes,
+    );
+    return linha;
+}
+
+/**
+ * Lê as três abas com os filtros e o mês atuais: os contadores das abas
+ * mostram quantas parcelas cada uma tem, e a tabela mostra a aba escolhida.
+ * (O nome continua carregarPendentes porque o resto do código já chama assim.)
+ */
 async function carregarPendentes() {
     const estaConsulta = ++ultimaConsulta;   // soma 1 e guarda: esta é a consulta nº 1, 2, 3...
     escreverAviso('erro-pendentes', '');
+    const parametros = montarParametrosFiltro();
 
     try {
-        const parcelas = await chamarApi(montarUrlPendentes());
+        // As três consultas vão juntas (Promise.all espera todas terminarem).
+        const abas = ['em_aberto', 'atrasadas', 'pagas'];
+        const listas = await Promise.all(abas.map((aba) => chamarApi(URL_DA_ABA[aba](parametros))));
         if (estaConsulta !== ultimaConsulta) return;   // já existe consulta mais nova: ignora esta resposta
+
+        abas.forEach((aba, i) => { el(`contador-${aba}`).textContent = listas[i].length; });
+        const parcelas = listas[abas.indexOf(abaAtual)];
+
         const corpo = el('corpo-pendentes');
         corpo.replaceChildren();   // apaga as linhas antigas
         for (const p of parcelas) {
-            corpo.append(criarLinhaPendente(p));
+            corpo.append(abaAtual === 'pagas' ? criarLinhaPaga(p) : criarLinhaPendente(p));
         }
+        el('titulo-coluna-situacao').textContent = abaAtual === 'pagas' ? 'Pagamento' : 'Situação';
         el('contador-pendentes').textContent = parcelas.length;   // só conta as linhas
         atualizarTextoVazio();
         el('area-pendentes').hidden = parcelas.length === 0;
@@ -472,6 +529,92 @@ async function carregarPendentes() {
         el('contador-pendentes').textContent = '–';
         escreverAviso('erro-pendentes', e.message);
     }
+}
+
+// ---------------------------------------------------------------------
+// US08: abas e navegação por mês
+// ---------------------------------------------------------------------
+
+/** Troca de aba: marca a aba escolhida e mostra a lista dela. */
+function escolherAba(aba) {
+    abaAtual = aba;
+    for (const botao of document.querySelectorAll('.abas [role="tab"]')) {
+        const escolhida = botao.dataset.aba === aba;
+        botao.setAttribute('aria-selected', String(escolhida));
+        botao.tabIndex = escolhida ? 0 : -1;   // só a aba escolhida recebe o Tab; as outras, pelas setas
+    }
+    el('area-lista').setAttribute('aria-labelledby', `aba-${aba}`);
+    carregarPendentes();
+}
+
+/** Setas ← e → (e Home/End) andam entre as abas, como o leitor de tela espera. */
+function navegarAbasPeloTeclado(evento) {
+    const abas = [...document.querySelectorAll('.abas [role="tab"]')];
+    const atual = abas.findIndex((b) => b.dataset.aba === abaAtual);
+    const destino = { ArrowRight: atual + 1, ArrowLeft: atual - 1, Home: 0, End: abas.length - 1 }[evento.key];
+    if (destino === undefined) return;
+    evento.preventDefault();
+    const botao = abas[(destino + abas.length) % abas.length];   // dá a volta nas pontas
+    botao.focus();
+    escolherAba(botao.dataset.aba);
+}
+
+/** Data no formato aaaa-mm-dd (sem passar por UTC, como em dataDaquiA). */
+function paraIso(d) {
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+/** "novembro de 2026" -> "Novembro de 2026" */
+function nomeDoMes(ano, mes) {
+    const texto = new Date(ano, mes, 1).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+    return texto.charAt(0).toUpperCase() + texto.slice(1);
+}
+
+/** Atualiza o título do mês e o botão "Todos os meses". */
+function mostrarMes() {
+    const semPeriodo = el('filtro-de').value === '' && el('filtro-ate').value === '';
+    if (mesAtual) {
+        el('mes-atual').textContent = nomeDoMes(mesAtual.ano, mesAtual.mes);
+    } else {
+        el('mes-atual').textContent = semPeriodo ? 'Todos os meses' : 'Período escolhido nos filtros';
+    }
+    el('mes-todos').setAttribute('aria-pressed', String(!mesAtual && semPeriodo));
+}
+
+/**
+ * Escolhe um mês: preenche "Vencimento de" com o dia 1 e "Vencimento até"
+ * com o último dia. new Date(ano, mes + 1, 0) é o "dia 0" do mês seguinte,
+ * ou seja, o último dia deste mês (o Date acerta 28, 29, 30 ou 31 sozinho).
+ */
+function irParaMes(ano, mes) {
+    const primeiro = new Date(ano, mes, 1);   // o Date também acerta mes = -1 ou 12 (vira o ano)
+    mesAtual = { ano: primeiro.getFullYear(), mes: primeiro.getMonth() };
+    el('filtro-de').value = paraIso(primeiro);
+    el('filtro-ate').value = paraIso(new Date(mesAtual.ano, mesAtual.mes + 1, 0));
+    mostrarMes();
+    carregarPendentes();
+}
+
+/** Setas ‹ e ›: anda um mês. Sem mês escolhido, parte do mês de hoje. */
+function andarMes(passo) {
+    const base = mesAtual || { ano: new Date().getFullYear(), mes: new Date().getMonth() };
+    irParaMes(base.ano, base.mes + passo);
+}
+
+/** "Todos os meses": apaga o período e mostra as parcelas de qualquer mês. */
+function mostrarTodosOsMeses() {
+    mesAtual = null;
+    el('filtro-de').value = '';
+    el('filtro-ate').value = '';
+    mostrarMes();
+    carregarPendentes();
+}
+
+/** Mudou "Vencimento de/até" à mão: já não é um mês certinho. */
+function aoMudarPeriodo() {
+    mesAtual = null;
+    mostrarMes();
+    carregarPendentes();
 }
 
 /**
@@ -492,13 +635,15 @@ function buscarAoApertarEnter(evento) {
     }
 }
 
-/** Botão "Limpar filtros": esvazia todos os filtros (a ordenação fica). */
+/**
+ * Botão "Limpar filtros": esvazia a busca e o cliente e volta para o mês de
+ * hoje (a aba e a ordenação ficam).
+ */
 function limparFiltros() {
-    for (const id of CAMPOS_FILTRO) {
-        el(id).value = '';
-    }
+    el('filtro-busca').value = '';
+    el('filtro-cliente').value = '';
     clearTimeout(temporizadorBusca);
-    carregarPendentes();
+    irParaMes(new Date().getFullYear(), new Date().getMonth());   // irParaMes já recarrega a lista
 }
 
 /**
@@ -1096,9 +1241,18 @@ document.addEventListener('DOMContentLoaded', () => {
     // US03: filtros e ordenação
     el('filtro-busca').addEventListener('input', agendarBusca);
     el('filtro-busca').addEventListener('keydown', buscarAoApertarEnter);
-    for (const id of ['filtro-cliente', 'filtro-situacao', 'filtro-de', 'filtro-ate']) {
-        el(id).addEventListener('change', carregarPendentes);
+    el('filtro-cliente').addEventListener('change', carregarPendentes);
+    for (const id of ['filtro-de', 'filtro-ate']) {
+        el(id).addEventListener('change', aoMudarPeriodo);   // US08: tira o "mês certinho"
     }
+    // US08: abas e mês
+    for (const botao of document.querySelectorAll('.abas [role="tab"]')) {
+        botao.addEventListener('click', () => escolherAba(botao.dataset.aba));
+    }
+    document.querySelector('.abas').addEventListener('keydown', navegarAbasPeloTeclado);
+    el('mes-anterior').addEventListener('click', () => andarMes(-1));
+    el('mes-seguinte').addEventListener('click', () => andarMes(1));
+    el('mes-todos').addEventListener('click', mostrarTodosOsMeses);
     el('botao-limpar-filtros').addEventListener('click', limparFiltros);
     for (const id of ['botao-baixar-csv', 'botao-baixar-xlsx']) {               // US05
         el(id).addEventListener('click', () => baixarPlanilha(el(id)));
@@ -1147,5 +1301,5 @@ document.addEventListener('DOMContentLoaded', () => {
 
     atualizarIndicadoresOrdem();
     carregarClientes();
-    carregarPendentes();
+    irParaMes(new Date().getFullYear(), new Date().getMonth());   // US08: começa no mês de hoje (e carrega a lista)
 });

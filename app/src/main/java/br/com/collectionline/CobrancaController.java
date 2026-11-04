@@ -76,6 +76,13 @@ public class CobrancaController implements HttpHandler {
                 if (!exigirMetodo(exchange, metodo, "GET")) return;
                 listarPendentes(exchange);
 
+            } else if (caminho.equals("/api/parcelas-pagas")) {                    // US08
+                if (!exigirMetodo(exchange, metodo, "GET")) return;
+                FiltroPendentes filtro = lerFiltroPendentes(exchange);
+                if (filtro != null) {
+                    JsonUtil.enviarJson(exchange, 200, repository.listarParcelasPagas(filtro));
+                }
+
             } else if (caminho.equals("/api/planilha")) {                          // US05
                 if (!exigirMetodo(exchange, metodo, "GET")) return;
                 baixarPlanilha(exchange);

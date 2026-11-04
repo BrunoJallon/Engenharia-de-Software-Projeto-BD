@@ -957,6 +957,84 @@ p {
 }
 
 /* ---------------------------------------------------------------------
+   US08: navegação por mês e abas
+   --------------------------------------------------------------------- */
+.navegador-mes {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 12px;
+    margin-bottom: 16px;
+}
+
+.mes-atual {
+    min-width: 13em;                  /* o título não "pula" ao trocar de mês */
+    margin: 0;
+    text-align: center;
+    font-size: 1.15rem;
+    font-weight: 700;
+}
+
+#mes-todos[aria-pressed="true"] {
+    color: #fff;
+    background: var(--cor-primaria);
+    border-color: var(--cor-primaria);
+}
+
+.abas {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-bottom: 16px;
+    border-bottom: 2px solid var(--cor-borda);
+}
+
+.abas [role="tab"] {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 44px;
+    padding: 8px 16px;
+    margin-bottom: -2px;              /* a linha da aba escolhida fica por cima da borda */
+    font: inherit;
+    font-weight: 600;
+    color: var(--cor-texto-suave);
+    background: none;
+    border: 0;
+    border-bottom: 3px solid transparent;
+    cursor: pointer;
+}
+
+.abas [role="tab"]:hover {
+    color: var(--cor-texto);
+}
+
+.abas [role="tab"][aria-selected="true"] {
+    color: var(--cor-primaria);
+    border-bottom-color: var(--cor-primaria);
+}
+
+.contador-aba {
+    min-width: 1.8em;
+    padding: 1px 8px;
+    font-size: 0.85rem;
+    text-align: center;
+    background: var(--cor-cartao-suave);
+    border: 1px solid var(--cor-borda);
+    border-radius: 999px;
+    font-variant-numeric: tabular-nums;
+}
+
+[aria-selected="true"] .contador-aba {
+    background: var(--cor-primaria-clara);
+}
+
+/* A contagem de atrasadas em vermelho chama a atenção */
+#aba-atrasadas .contador-aba {
+    color: var(--cor-perigo);
+}
+
+/* ---------------------------------------------------------------------
    US07: botões de ícone na lista (editar, marcar como paga, excluir)
    --------------------------------------------------------------------- */
 .acoes-linha {

@@ -7,6 +7,7 @@ import br.com.collectionline.dto.CobrancaResumoDTO;
 import br.com.collectionline.dto.FiltroPendentes;
 import br.com.collectionline.dto.ParcelaDTO;
 import br.com.collectionline.dto.ParcelaDetalheDTO;
+import br.com.collectionline.dto.ParcelaPagaDTO;
 import br.com.collectionline.dto.ParcelaPendenteDTO;
 
 import java.math.BigDecimal;
@@ -160,6 +161,47 @@ public class CobrancaRepository {
                             rs.getObject("data_vencimento", LocalDate.class),
                             rs.getInt("dias_para_vencer"),
                             rs.getString("situacao")));
+                }
+            }
+        }
+        return lista;
+    }
+
+    /**
+     * US08: parcelas pagas (aba "Pagas"), com os mesmos filtros e a mesma
+     * ordenação da lista de pendentes (a situação não se aplica aqui).
+     */
+    public List<ParcelaPagaDTO> listarParcelasPagas(FiltroPendentes filtro) throws SQLException {
+        String coluna = filtro.ordem() == null
+                ? "data_vencimento"
+                : COLUNAS_ORDENAVEIS.getOrDefault(filtro.ordem(), "data_vencimento");
+        String direcao = "desc".equals(filtro.direcao()) ? "DESC" : "ASC";
+        String sql = """
+                SELECT id_parcela, cpf, nome, telefone, id_cobranca, parcela, valor,
+                       data_vencimento, data_pagamento, dias_atraso_pagamento
+                  FROM pesquisar_parcelas_pagas(?::char(11), ?::text, ?::date, ?::date)
+                 ORDER BY %s %s, data_vencimento, cpf, id_cobranca, id_parcela""".formatted(coluna, direcao);
+
+        List<ParcelaPagaDTO> lista = new ArrayList<>();
+        try (Connection conn = database.abrirConexao();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, filtro.cpf());
+            ps.setString(2, filtro.busca());
+            ps.setObject(3, filtro.de());
+            ps.setObject(4, filtro.ate());
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    lista.add(new ParcelaPagaDTO(
+                            rs.getInt("id_parcela"),
+                            rs.getString("cpf"),
+                            rs.getString("nome"),
+                            rs.getString("telefone"),
+                            rs.getInt("id_cobranca"),
+                            rs.getString("parcela"),
+                            rs.getBigDecimal("valor"),
+                            rs.getObject("data_vencimento", LocalDate.class),
+                            rs.getObject("data_pagamento", LocalDate.class),
+                            rs.getInt("dias_atraso_pagamento")));
                 }
             }
         }

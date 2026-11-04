@@ -164,14 +164,14 @@
                     </span>
                     <div>
                         <div class="titulo-com-contador">
-                            <h2 id="titulo-pendentes">Parcelas pendentes</h2>
+                            <h2 id="titulo-pendentes">Parcelas</h2>
                             <!-- Pílula com quantas linhas a tabela tem agora (o app.js troca o número).
                                  Na tela aparece só o número; o leitor de tela ouve "Parcelas na lista: 3".
                                  Tudo numa linha só e sem espaços entre as tags, para não surgir
                                  um espaço extra dentro da pílula. -->
                             <span class="contador" aria-live="polite" aria-atomic="true"><span class="sr-only">Parcelas na lista: </span><span id="contador-pendentes">–</span></span>
                         </div>
-                        <p class="cartao-descricao">Clique no título de uma coluna para ordenar e no número da cobrança para ver o detalhe.</p>
+                        <p class="cartao-descricao">Escolha o mês e a aba. Clique no título de uma coluna para ordenar.</p>
                     </div>
                 </div>
                 <!-- US05: baixa as cobranças da lista (com os filtros de agora) numa planilha.
@@ -182,6 +182,33 @@
                     <button type="button" id="botao-baixar-xlsx" class="botao-secundario botao-pequeno"
                             data-formato="xlsx">Baixar Excel</button>
                 </div>
+            </div>
+
+            <!-- US08: mês, no estilo de app de banco. As setas trocam o mês; a lista
+                 mostra as parcelas que VENCEM no mês escolhido. Por baixo, o mês só
+                 preenche os campos "Vencimento de/até" com o dia 1 e o último dia. -->
+            <div class="navegador-mes" role="group" aria-label="Mês do vencimento">
+                <button type="button" id="mes-anterior" class="botao-icone" aria-label="Mês anterior" title="Mês anterior">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+                         stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>
+                </button>
+                <p id="mes-atual" class="mes-atual" aria-live="polite">–</p>
+                <button type="button" id="mes-seguinte" class="botao-icone" aria-label="Mês seguinte" title="Mês seguinte">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+                         stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>
+                </button>
+                <button type="button" id="mes-todos" class="botao-secundario botao-pequeno" aria-pressed="false">Todos os meses</button>
+            </div>
+
+            <!-- US08: abas. role="tablist"/"tab" faz o leitor de tela anunciar
+                 "aba, 1 de 3, selecionada". As setas ← e → trocam de aba. -->
+            <div class="abas" role="tablist" aria-label="Tipo de parcela">
+                <button type="button" role="tab" id="aba-em_aberto" data-aba="em_aberto"
+                        aria-controls="area-lista" aria-selected="true">Em aberto <span class="contador-aba" id="contador-em_aberto">–</span></button>
+                <button type="button" role="tab" id="aba-atrasadas" data-aba="atrasadas"
+                        aria-controls="area-lista" aria-selected="false" tabindex="-1">Atrasadas <span class="contador-aba" id="contador-atrasadas">–</span></button>
+                <button type="button" role="tab" id="aba-pagas" data-aba="pagas"
+                        aria-controls="area-lista" aria-selected="false" tabindex="-1">Pagas <span class="contador-aba" id="contador-pagas">–</span></button>
             </div>
 
             <!-- Barra de filtros (US03). Cada filtro é uma div.campo; eles ficam lado
@@ -197,16 +224,6 @@
                     <label for="filtro-cliente">Filtrar por cliente</label>
                     <select id="filtro-cliente">
                         <option value="">Todos os clientes</option>
-                    </select>
-                </div>
-
-                <div class="campo campo-curto">
-                    <label for="filtro-situacao">Situação</label>
-                    <select id="filtro-situacao">
-                        <option value="">Todas</option>
-                        <option value="atrasada">Atrasadas</option>
-                        <option value="vence_hoje">Vencem hoje</option>
-                        <option value="a_vencer">A vencer</option>
                     </select>
                 </div>
 
@@ -244,6 +261,8 @@
                 <p id="erro-pendentes" role="alert"></p>
             </div>
 
+            <!-- US08: o conteúdo da aba escolhida (tabela ou estado vazio) -->
+            <div id="area-lista" role="tabpanel" aria-labelledby="aba-em_aberto">
             <div id="area-pendentes">
                 <!-- Só aparece em telas estreitas, onde a tabela rola para o lado. -->
                 <p class="dica-rolagem">Deslize a tabela para o lado para ver todas as colunas.</p>
@@ -263,7 +282,8 @@
                                 <th scope="col">Parcela</th>
                                 <th scope="col" class="numero"><button type="button" class="botao-ordenar" data-ordem="valor">Valor<span class="seta" aria-hidden="true"></span></button></th>
                                 <th scope="col"><button type="button" class="botao-ordenar" data-ordem="vencimento">Vencimento<span class="seta" aria-hidden="true"></span></button></th>
-                                <th scope="col">Situação</th>
+                                <!-- Na aba "Pagas", o app.js troca o título para "Pagamento" -->
+                                <th scope="col" id="titulo-coluna-situacao">Situação</th>
                                 <!-- US07: editar (abre o painel), marcar como paga e excluir -->
                                 <th scope="col">Ações</th>
                             </tr>
@@ -286,6 +306,7 @@
                 <p class="vazio-titulo" id="vazio-titulo">Nenhuma parcela pendente.</p>
                 <p class="vazio-texto" id="vazio-texto">Cadastre uma cobrança ou escolha outro cliente no filtro.</p>
             </div>
+            </div><!-- fim do #area-lista -->
         </section>
     </main>
 
