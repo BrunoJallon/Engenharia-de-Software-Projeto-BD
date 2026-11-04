@@ -15,6 +15,8 @@
 \ir sql/07_funcoes_us04.sql
 -- US05: resumo de cobranças para as planilhas
 \ir sql/08_relatorio_us05.sql
+-- US06: data do pagamento (em dia ou com atraso) e id da parcela na pesquisa
+\ir sql/09_pagamento_us06.sql
 
 -- Testes de aceitação (cada arquivo termina em ROLLBACK)
 \ir testes/testes_us01.sql
@@ -22,3 +24,4 @@
 \ir testes/testes_us03.sql
 \ir testes/testes_us04.sql
 \ir testes/testes_us05.sql
+\ir testes/testes_us06.sql
