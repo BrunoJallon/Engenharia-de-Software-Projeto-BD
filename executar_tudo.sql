@@ -19,6 +19,8 @@
 \ir sql/09_pagamento_us06.sql
 -- US07: excluir uma parcela e pagar várias de uma vez (ações da lista)
 \ir sql/10_acoes_lista_us07.sql
+-- US08: abas em aberto / atrasadas / pagas e navegação por mês
+\ir sql/11_abas_us08.sql
 
 -- Testes de aceitação (cada arquivo termina em ROLLBACK)
 \ir testes/testes_us01.sql
@@ -28,3 +30,4 @@
 \ir testes/testes_us05.sql
 \ir testes/testes_us06.sql
 \ir testes/testes_us07.sql
+\ir testes/testes_us08.sql
