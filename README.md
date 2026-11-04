@@ -574,3 +574,57 @@ Roteiro de teste manual da US06:
 | 4 | "Editar pagamento" e trocar a data | etiqueta recalculada | CA4 |
 | 5 | Tentar uma data no futuro | o calendário não deixa; pela API, mensagem do banco | CA3 |
 | 6 | "Desfazer pagamento" | a parcela volta para a lista, sem data | CA5 |
+
+## Iteração 6: US07
+
+> **COMO** operador **EU QUERO** editar, marcar como paga e excluir direto na lista de pendentes **PARA QUE** eu não precise abrir a cobrança para cada ação.
+
+Mudanças na lista de pendentes:
+
+- A coluna **"Cobrança" (nº X) saiu**: o id da parcela (US06) e a coluna "Parcela" já identificam a linha. O nº da cobrança continua aparecendo dentro das janelas.
+- Nova coluna **"Ações"**, ao lado da situação, com três botões de ícone (cada um tem nome para leitor de tela e dica ao passar o mouse):
+  - **lápis (Editar):** abre o painel da cobrança (US02/US04/US06), onde se edita a parcela ou a cobrança e se corrige ou desfaz um pagamento;
+  - **✓ (Marcar como paga):** abre uma janela com **todas as parcelas pendentes da cobrança**, com caixinhas. A parcela da linha já vem marcada, e dá para marcar **todas** ("Todas as parcelas pendentes") ou **só algumas**. A data do pagamento vem com o dia de hoje;
+  - **lixeira (Excluir):** pergunta se é para **excluir só a parcela** ou **a cobrança inteira**. Em cobrança à vista (1/1) só aparece a segunda opção.
+
+Regras no banco ([`sql/10_acoes_lista_us07.sql`](sql/10_acoes_lista_us07.sql)):
+
+- **`excluir_parcela`:** parcela paga não pode ser excluída, e a única parcela da cobrança também não (`object_not_in_prerequisite_state` → 409). As outras são **renumeradas** (excluir a 2/3 deixa 1/2 e 2/2). A cobrança passa a valer a **soma das parcelas que sobraram**, o "último vencimento" é o da última que sobrou e, se não sobrar nenhuma pendente, a cobrança fica paga. A renumeração é feita em dois passos por causa do `UNIQUE (id_cobranca, numero_parcela)`, que é conferido linha a linha.
+- **`pagar_parcelas`:** paga uma lista de parcelas na mesma data usando a `pagar_parcela` da US06, então valem as mesmas regras. É **tudo ou nada**: se uma falhar, nenhuma fica paga.
+- Excluir a cobrança inteira usa a `excluir_cobranca` da US04 (só sem parcela paga).
+
+| CA | Critério | Resultado esperado |
+|---|---|---|
+| **CA1** | Excluir uma parcela | R$ 100,00 em 3x, excluindo a 2/3 → sobram 1/2 e 2/2, com os mesmos vencimentos; cobrança = R$ 66,67 e último vencimento = o da 2/2 |
+| **CA2** | Não exclui | parcela paga ou única parcela → `object_not_in_prerequisite_state`; inexistente → `no_data_found` |
+| **CA3** | Excluir a última pendente | a cobrança fica paga |
+| **CA4** | Pagar várias | a 1ª e a 3ª de 3 (com id repetido) → 2 pagas, na data informada; depois a 2ª → cobrança paga |
+| **CA5** | Tudo ou nada | uma já paga na lista → nenhuma é paga; lista vazia ou data futura → `invalid_parameter_value` |
+
+| método e caminho | o que faz | resposta |
+|---|---|---|
+| `DELETE /api/parcelas/{id}` | chama `excluir_parcela` | 200 `{"mensagem": ...}`; 404 ou 409 |
+| `POST /api/pagamentos` com `{"idsParcelas": [1, 2], "dataPagamento": "aaaa-mm-dd"}` | chama `pagar_parcelas` | 200 `{"mensagem": "2 parcelas marcadas como pagas em dd/mm/aaaa."}`; 400, 404 ou 409 |
+
+Saída esperada dos testes da US07:
+
+```text
+psql:testes/testes_us07.sql:47: NOTA:  OK  CA1 - excluir uma parcela renumera as outras e ajusta valor e último vencimento
+psql:testes/testes_us07.sql:82: NOTA:  OK  CA2 - não exclui parcela paga, a única parcela, nem inexistente (3 casos)
+psql:testes/testes_us07.sql:98: NOTA:  OK  CA3 - excluir a última parcela pendente deixa a cobrança paga
+psql:testes/testes_us07.sql:125: NOTA:  OK  CA4 - pagar várias parcelas de uma vez (específicas e depois o resto)
+psql:testes/testes_us07.sql:161: NOTA:  OK  CA5 - pagar várias é tudo ou nada; lista vazia e data futura são recusadas
+TODOS OS TESTES DA US07 PASSARAM
+```
+
+Roteiro de teste manual da US07 (com uma cobrança de R$ 100,00 em 4x):
+
+| # | Passo | Resultado esperado | CA |
+|---|---|---|---|
+| 1 | Olhar a lista | sem a coluna "Cobrança"; três botões em "Ações" | — |
+| 2 | Lixeira na 2/4 → "Excluir só a parcela" | sobram 1/3, 2/3 e 3/3 | CA1 |
+| 3 | ✓ na 1/3, marcar também a 3/3, data de 3 dias atrás | "2 parcelas marcadas como pagas"; só a 2/3 continua na lista | CA4 |
+| 4 | Lixeira na 2/3 → "Excluir a cobrança inteira" | mensagem do banco: a cobrança tem parcela paga | — |
+| 5 | ✓ → desmarcar tudo → Confirmar | "Marque ao menos uma parcela." | CA5 |
+| 6 | Lápis | abre o painel da cobrança, como o antigo "nº X" | — |
+| 7 | Lixeira numa cobrança à vista (1/1) | só a opção "Excluir a cobrança" | CA2 |
