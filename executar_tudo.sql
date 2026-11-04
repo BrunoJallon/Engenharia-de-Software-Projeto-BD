@@ -13,9 +13,12 @@
 \ir sql/06_pesquisa_us03.sql
 -- US04: editar e excluir cobrança
 \ir sql/07_funcoes_us04.sql
+-- US05: resumo de cobranças para as planilhas
+\ir sql/08_relatorio_us05.sql
 
 -- Testes de aceitação (cada arquivo termina em ROLLBACK)
 \ir testes/testes_us01.sql
 \ir testes/testes_us02.sql
 \ir testes/testes_us03.sql
 \ir testes/testes_us04.sql
+\ir testes/testes_us05.sql
