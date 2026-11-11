@@ -94,7 +94,7 @@ Correspondência entre o DER e o banco:
 
 **Premissas assumidas nesta entrega:**
 
-- Não havia dicionário de dados do grupo na pasta; valem os tipos, tamanhos e obrigatoriedades do prompt da atividade.
+- Ainda não havia dicionário de dados do grupo; valem os tipos, tamanhos e obrigatoriedades do enunciado da atividade.
 - **Evidência do test-first** (o git não mostra a fase vermelha): antes de a função existir, a primeira execução dos testes parou com `ERRO: função cadastrar_cobranca_parcelada(...) não existe` (SQLSTATE 42883); só depois a função foi escrita e os testes passaram. O CA8 testa a view, que só passou a existir no commit 3: ele foi escrito junto com ela e também falhou primeiro, com `relação "vw_parcelas_pendentes" não existe`.
 - "Só dígitos" em CPF, telefone e CEP foi implementado com `CHECK` por expressão regular.
 - Os ids (`SERIAL`) podem pular números: os testes fazem `ROLLBACK`, mas os valores já consumidos da sequência não voltam. É o comportamento normal do PostgreSQL.
